@@ -381,6 +381,9 @@ func (e *Engine) nextEnvelope(ctx context.Context) (*Envelope, error) {
 			continue
 		}
 
+		// TODO: MichaelP Implement PaymentManager, now temporary request payment each message
+		msg.RequirePayment(len(blks))
+
 		return &Envelope{
 			Peer:    nextTask.Target,
 			Message: msg,

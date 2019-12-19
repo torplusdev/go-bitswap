@@ -26,6 +26,10 @@ type BitSwapMessage interface {
 	// Blocks returns a slice of unique blocks.
 	Blocks() []blocks.Block
 
+	RequiredPayment() int
+
+	PaymentProve() string
+
 	// AddEntry adds an entry to the Wantlist.
 	AddEntry(key cid.Cid, priority int)
 
@@ -35,6 +39,10 @@ type BitSwapMessage interface {
 
 	// A full wantlist is an authoritative copy, a 'non-full' wantlist is a patch-set
 	Full() bool
+
+	RequirePayment(blocks int)
+
+	SubmitPayment(hash string)
 
 	AddBlock(blocks.Block)
 	Exportable
@@ -55,6 +63,8 @@ type impl struct {
 	full     bool
 	wantlist map[cid.Cid]*Entry
 	blocks   map[cid.Cid]blocks.Block
+	requestedPaymentPerBlocks	int32
+	paymentProve				string
 }
 
 // New returns a new, empty bitswap message
@@ -114,6 +124,10 @@ func newMessageFromProto(pbm pb.Message) (BitSwapMessage, error) {
 		m.AddBlock(blk)
 	}
 
+	// Bitswap +
+	m.paymentProve = pbm.GetPaymentProve();
+	m.requestedPaymentPerBlocks = pbm.GetRequestedPaymentPerBlocks();
+
 	return m, nil
 }
 
@@ -131,6 +145,22 @@ func (m *impl) Wantlist() []Entry {
 		out = append(out, *e)
 	}
 	return out
+}
+
+func (m *impl) SubmitPayment(hash string) {
+	m.paymentProve = hash
+}
+
+func (m *impl) RequirePayment(blocks int) {
+	m.requestedPaymentPerBlocks = int32(blocks)
+}
+
+func (m *impl) RequiredPayment() int {
+	return int(m.requestedPaymentPerBlocks);
+}
+
+func (m* impl) PaymentProve() string  {
+	return m.paymentProve;
 }
 
 func (m *impl) Blocks() []blocks.Block {
@@ -210,6 +240,11 @@ func (m *impl) ToProtoV0() *pb.Message {
 	for _, b := range blocks {
 		pbm.Blocks = append(pbm.Blocks, b.RawData())
 	}
+
+	// Bitswap +
+	pbm.RequestedPaymentPerBlocks = m.requestedPaymentPerBlocks;
+	pbm.PaymentProve = m.paymentProve;
+
 	return pbm
 }
 
@@ -233,6 +268,11 @@ func (m *impl) ToProtoV1() *pb.Message {
 			Prefix: b.Cid().Prefix().Bytes(),
 		})
 	}
+
+	// Bitswap +
+	pbm.RequestedPaymentPerBlocks = m.requestedPaymentPerBlocks;
+	pbm.PaymentProve = m.paymentProve;
+
 	return pbm
 }
 
@@ -270,5 +310,7 @@ func (m *impl) Loggable() map[string]interface{} {
 	return map[string]interface{}{
 		"blocks": blocks,
 		"wants":  m.Wantlist(),
+		"prove": m.paymentProve,
+		"paymentsRequest": m.requestedPaymentPerBlocks,
 	}
 }

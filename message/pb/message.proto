@@ -26,4 +26,6 @@ message Message {
   Wantlist wantlist = 1 [(gogoproto.nullable) = false];
   repeated bytes blocks = 2;		// used to send Blocks in bitswap 1.0.0
   repeated Block payload = 3 [(gogoproto.nullable) = false];		// used to send Blocks in bitswap 1.1.0
+  int32 requestedPaymentPerBlocks = 4; // Bitswap+ addon
+  string paymentProve = 5;           // Bitswap+ addon
 }

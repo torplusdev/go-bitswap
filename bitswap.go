@@ -395,6 +395,12 @@ func (bs *Bitswap) ReceiveMessage(ctx context.Context, p peer.ID, incoming bsmsg
 		log.Warningf("ReceiveMessage recvBlockFrom error: %s", err)
 		return
 	}
+
+	requiredPayment := incoming.RequiredPayment();
+
+	if requiredPayment > 0 {
+		//bs.pm.ProcessPayment(ctx, p, requiredPayment)
+	}
 }
 
 func (bs *Bitswap) updateReceiveCounters(blocks []blocks.Block) {

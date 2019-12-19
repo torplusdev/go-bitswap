@@ -63,6 +63,7 @@ func (bs *Bitswap) taskWorker(ctx context.Context, id int) {
 					}))
 					outgoing.AddBlock(block)
 				}
+
 				bs.engine.MessageSent(envelope.Peer, outgoing)
 
 				bs.sendBlocks(ctx, envelope)
@@ -87,15 +88,15 @@ func (bs *Bitswap) sendBlocks(ctx context.Context, env *engine.Envelope) {
 	defer env.Sent()
 
 	msgSize := 0
-	msg := bsmsg.New(false)
+	//msg := bsmsg.New(false)
 	for _, block := range env.Message.Blocks() {
 		msgSize += len(block.RawData())
-		msg.AddBlock(block)
+		//msg.AddBlock(block)
 		log.Infof("Sending block %s to %s", block, env.Peer)
 	}
 
 	bs.sentHistogram.Observe(float64(msgSize))
-	err := bs.network.SendMessage(ctx, env.Peer, msg)
+	err := bs.network.SendMessage(ctx, env.Peer, env.Message)
 	if err != nil {
 		log.Infof("sendblock error: %s", err)
 	}
