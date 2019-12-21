@@ -23,6 +23,7 @@ import (
 	bssm "github.com/ipfs/go-bitswap/sessionmanager"
 	bsspm "github.com/ipfs/go-bitswap/sessionpeermanager"
 	bswm "github.com/ipfs/go-bitswap/wantmanager"
+	bspaym "github.com/ipfs/go-bitswap/paymentmanager"
 	blocks "github.com/ipfs/go-block-format"
 	cid "github.com/ipfs/go-cid"
 	blockstore "github.com/ipfs/go-ipfs-blockstore"
@@ -113,7 +114,10 @@ func New(parent context.Context, network bsnet.BitSwapNetwork,
 		return bsmq.New(ctx, p, network)
 	}
 
-	wm := bswm.New(ctx, bspm.New(ctx, peerQueueFactory))
+	pm := bspm.New(ctx, peerQueueFactory)
+
+	paym := bspaym.New(ctx, pm)
+	wm := bswm.New(ctx, pm)
 	pqm := bspqm.New(ctx, network)
 
 	sessionFactory := func(ctx context.Context, id uint64, pm bssession.PeerManager, srs bssession.RequestSplitter,
@@ -138,6 +142,7 @@ func New(parent context.Context, network bsnet.BitSwapNetwork,
 		process:          px,
 		newBlocks:        make(chan cid.Cid, HasBlockBufferSize),
 		provideKeys:      make(chan cid.Cid, provideKeysBufferSize),
+		paym:			  paym,
 		wm:               wm,
 		pqm:              pqm,
 		sm:               bssm.New(ctx, sessionFactory, sessionPeerManagerFactory, sessionRequestSplitterFactory, notif),
@@ -156,6 +161,7 @@ func New(parent context.Context, network bsnet.BitSwapNetwork,
 		option(bs)
 	}
 
+	bs.paym.Startup()
 	bs.wm.Startup()
 	bs.pqm.Startup()
 	network.SetDelegate(bs)
@@ -180,6 +186,9 @@ func New(parent context.Context, network bsnet.BitSwapNetwork,
 type Bitswap struct {
 	// the wantlist tracks global wants for bitswap
 	wm *bswm.WantManager
+
+	// payment manager
+	paym *bspaym.PaymentManager
 
 	// the provider query manager manages requests to find providers
 	pqm *bspqm.ProviderQueryManager
@@ -399,7 +408,13 @@ func (bs *Bitswap) ReceiveMessage(ctx context.Context, p peer.ID, incoming bsmsg
 	requiredPayment := incoming.RequiredPayment();
 
 	if requiredPayment > 0 {
-		//bs.pm.ProcessPayment(ctx, p, requiredPayment)
+		bs.paym.ProcessPayment(ctx, p, requiredPayment)
+	}
+
+	paymentHash := incoming.PaymentProve()
+
+	if paymentHash != "" {
+		bs.paym.ValidatePayment(ctx, p, paymentHash)
 	}
 }
 

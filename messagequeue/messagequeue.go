@@ -58,6 +58,16 @@ func New(ctx context.Context, p peer.ID, network MessageNetwork) *MessageQueue {
 	}
 }
 
+func (mq *MessageQueue) AddPaymentMessage(paymentHash string) {
+	if !mq.addPayment(paymentHash) {
+		return
+	}
+	select {
+	case mq.outgoingWork <- struct{}{}:
+	default:
+	}
+}
+
 // AddMessage adds new entries to an outgoing message for a given session.
 func (mq *MessageQueue) AddMessage(entries []bsmsg.Entry, ses uint64) {
 	if !mq.addEntries(entries, ses) {
@@ -145,6 +155,20 @@ func (mq *MessageQueue) rebroadcastWantlist() {
 	mq.rebroadcastIntervalLk.RUnlock()
 
 	mq.addWantlist()
+}
+
+func (mq *MessageQueue) addPayment(paymentHash string) bool {
+	var work bool
+	mq.nextMessageLk.Lock()
+	defer mq.nextMessageLk.Unlock()
+	// if we have no message held allocate a new one
+	if mq.nextMessage == nil {
+		mq.nextMessage = bsmsg.New(false)
+	}
+
+	mq.nextMessage.SubmitPayment(paymentHash)
+
+	return work
 }
 
 func (mq *MessageQueue) addEntries(entries []bsmsg.Entry, ses uint64) bool {

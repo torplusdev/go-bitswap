@@ -96,10 +96,15 @@ func (bs *Bitswap) sendBlocks(ctx context.Context, env *engine.Envelope) {
 	}
 
 	bs.sentHistogram.Observe(float64(msgSize))
+
+	// TODO: check if peer is blocked
+
 	err := bs.network.SendMessage(ctx, env.Peer, env.Message)
 	if err != nil {
 		log.Infof("sendblock error: %s", err)
 	}
+
+	bs.paym.RequirePayment(ctx, env.Peer, msgSize)
 }
 
 func (bs *Bitswap) provideWorker(px process.Process) {
