@@ -116,7 +116,7 @@ func New(parent context.Context, network bsnet.BitSwapNetwork,
 
 	pm := bspm.New(ctx, peerQueueFactory)
 
-	paym := bspaym.New(ctx, pm)
+	paym := bspaym.New(ctx, pm, network)
 	wm := bswm.New(ctx, pm)
 	pqm := bspqm.New(ctx, network)
 

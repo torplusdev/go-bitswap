@@ -2,15 +2,14 @@ package paymentmanager
 
 import (
 	"context"
-//	"math"
 
-	//	bsmsg "github.com/ipfs/go-bitswap/message"
 	logging "github.com/ipfs/go-log"
 	"github.com/ipfs/go-metrics-interface"
 
-	//	cid "github.com/ipfs/go-cid"
-//	metrics "github.com/ipfs/go-metrics-interface"
-	peer "github.com/libp2p/go-libp2p-core/peer"
+	bsnet "github.com/ipfs/go-bitswap/network"
+	"github.com/libp2p/go-libp2p-core/peer"
+
+	"github.com/stellar/go/keypair"
 )
 
 var log = logging.Logger("bitswap")
@@ -31,21 +30,32 @@ type PaymentManager struct {
 	ctx    context.Context
 	cancel func()
 
-	peerHandler   PeerHandler
+	network      bsnet.BitSwapNetwork
+	peerHandler  PeerHandler
 	paymentGauge metrics.Gauge
+	keypair      keypair.KP
 }
 
 // New initializes a new WantManager for a given context.
-func New(ctx context.Context, peerHandler PeerHandler) *PaymentManager {
+func New(ctx context.Context, peerHandler PeerHandler, network bsnet.BitSwapNetwork) *PaymentManager {
 	ctx, cancel := context.WithCancel(ctx)
 	paymentGauge := metrics.NewCtx(ctx, "payments_total",
 		"Number of items in payments queue.").Gauge()
+
+	kp, err := keypair.Parse(network.GetStellarSeed())
+
+	if err != nil {
+		return nil;
+	}
+
 	return &PaymentManager{
 		paymentMessages:  make(chan paymentMessage, 10),
-		ctx:           ctx,
-		cancel:        cancel,
-		peerHandler:   peerHandler,
-		paymentGauge: paymentGauge,
+		ctx:           	ctx,
+		cancel:        	cancel,
+		peerHandler:   	peerHandler,
+		paymentGauge: 	paymentGauge,
+		network:		network,
+		keypair:		kp,
 	}
 }
 
@@ -58,6 +68,16 @@ func (pm *PaymentManager) Startup() {
 // Shutdown ends processing for the pay manager.
 func (pm *PaymentManager) Shutdown() {
 	pm.cancel()
+}
+
+func (pm *PaymentManager) getPeerStellarKey(id peer.ID) (string, error) {
+	key, err := pm.network.GetFromPeerStore(id, "StellarKey")
+
+	if err != nil {
+		return "", err
+	}
+
+	return key.(string), nil
 }
 
 func (pm *PaymentManager) run() {
@@ -125,6 +145,15 @@ type processPayment struct {
 func (p processPayment) handle(wm *PaymentManager) {
 	// TODO: call API
 	paymentHash := "hash"
+
+	targetStellarKey, err := wm.getPeerStellarKey(p.target)
+	if err != nil {
+		log.Error("agent version mismatch", err)
+	}
+
+	log.Debug(targetStellarKey)
+
+	seed := wm.keypair.Seed()
 
 	wm.peerHandler.SendPaymentMessage(p.target, paymentHash)
 }

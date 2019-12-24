@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"io"
 
+	blocks "github.com/ipfs/go-block-format"
 	pb "github.com/ipfs/go-bitswap/message/pb"
 	wantlist "github.com/ipfs/go-bitswap/wantlist"
-	blocks "github.com/ipfs/go-block-format"
 
 	cid "github.com/ipfs/go-cid"
 	pool "github.com/libp2p/go-buffer-pool"

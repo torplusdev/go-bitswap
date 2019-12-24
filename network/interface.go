@@ -41,6 +41,10 @@ type BitSwapNetwork interface {
 
 	ConnectionManager() connmgr.ConnManager
 
+	GetFromPeerStore(p peer.ID, key string) (interface{}, error)
+
+	GetStellarSeed() string
+
 	Stats() Stats
 
 	Routing
