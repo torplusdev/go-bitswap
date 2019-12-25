@@ -9,7 +9,10 @@ import (
 	bsnet "github.com/ipfs/go-bitswap/network"
 	"github.com/libp2p/go-libp2p-core/peer"
 
+	"github.com/stellar/go/clients/horizonclient"
 	"github.com/stellar/go/keypair"
+	"github.com/stellar/go/network"
+	"github.com/stellar/go/txnbuild"
 )
 
 var log = logging.Logger("bitswap")
@@ -33,7 +36,7 @@ type PaymentManager struct {
 	network      bsnet.BitSwapNetwork
 	peerHandler  PeerHandler
 	paymentGauge metrics.Gauge
-	keypair      keypair.KP
+	keypair      *keypair.Full
 }
 
 // New initializes a new WantManager for a given context.
@@ -42,7 +45,7 @@ func New(ctx context.Context, peerHandler PeerHandler, network bsnet.BitSwapNetw
 	paymentGauge := metrics.NewCtx(ctx, "payments_total",
 		"Number of items in payments queue.").Gauge()
 
-	kp, err := keypair.Parse(network.GetStellarSeed())
+	kp, err := keypair.ParseFull(network.GetStellarSeed())
 
 	if err != nil {
 		return nil;
@@ -143,9 +146,6 @@ type processPayment struct {
 }
 
 func (p processPayment) handle(wm *PaymentManager) {
-	// TODO: call API
-	paymentHash := "hash"
-
 	targetStellarKey, err := wm.getPeerStellarKey(p.target)
 	if err != nil {
 		log.Error("agent version mismatch", err)
@@ -153,7 +153,35 @@ func (p processPayment) handle(wm *PaymentManager) {
 
 	log.Debug(targetStellarKey)
 
-	seed := wm.keypair.Seed()
+	// Create and fund the address on TestNet, using friendbot
+	client := horizonclient.DefaultTestNetClient
 
-	wm.peerHandler.SendPaymentMessage(p.target, paymentHash)
+	ar := horizonclient.AccountRequest{AccountID: wm.keypair.Address()}
+	sourceAccount, err := client.AccountDetail(ar)
+
+	op := txnbuild.Payment{
+		Destination: targetStellarKey,
+		Amount:      "10",
+		Asset:       txnbuild.NativeAsset{},
+	}
+
+	// Construct the transaction that will carry the operation
+	tx := txnbuild.Transaction{
+		SourceAccount: &sourceAccount,
+		Operations:    []txnbuild.Operation{&op},
+		Timebounds:    txnbuild.NewTimeout(300),
+		Network:       network.TestNetworkPassphrase,
+	}
+
+	// Sign the transaction, serialise it to XDR, and base 64 encode it
+	txeBase64, err := tx.BuildSignEncode(wm.keypair)
+
+	// Submit the transaction
+	resp, err := client.SubmitTransactionXDR(txeBase64)
+	if err != nil {
+		hError := err.(*horizonclient.Error)
+		log.Fatal("Error submitting transaction:", hError)
+	}
+
+	wm.peerHandler.SendPaymentMessage(p.target, resp.Hash)
 }
