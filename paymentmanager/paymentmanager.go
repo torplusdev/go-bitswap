@@ -2,6 +2,7 @@ package paymentmanager
 
 import (
 	"context"
+	"strconv"
 
 	logging "github.com/ipfs/go-log"
 	"github.com/ipfs/go-metrics-interface"
@@ -20,6 +21,7 @@ var log = logging.Logger("bitswap")
 // PeerHandler sends changes out to the network as they get added to the payment list
 type PeerHandler interface {
 	SendPaymentMessage(target peer.ID, paymentHash string)
+	RequirePaymentMessage(target peer.ID, blocks int)
 }
 
 type paymentMessage interface {
@@ -33,10 +35,12 @@ type PaymentManager struct {
 	ctx    context.Context
 	cancel func()
 
-	network      bsnet.BitSwapNetwork
-	peerHandler  PeerHandler
-	paymentGauge metrics.Gauge
-	keypair      *keypair.Full
+	stellarClient	*horizonclient.Client
+
+	network      	bsnet.BitSwapNetwork
+	peerHandler  	PeerHandler
+	paymentGauge 	metrics.Gauge
+	keypair      	*keypair.Full
 }
 
 // New initializes a new WantManager for a given context.
@@ -51,6 +55,9 @@ func New(ctx context.Context, peerHandler PeerHandler, network bsnet.BitSwapNetw
 		return nil;
 	}
 
+	// Create and fund the address on TestNet, using friendbot
+	client := horizonclient.DefaultTestNetClient
+
 	return &PaymentManager{
 		paymentMessages:  make(chan paymentMessage, 10),
 		ctx:           	ctx,
@@ -59,6 +66,7 @@ func New(ctx context.Context, peerHandler PeerHandler, network bsnet.BitSwapNetw
 		paymentGauge: 	paymentGauge,
 		network:		network,
 		keypair:		kp,
+		stellarClient:	client,
 	}
 }
 
@@ -96,9 +104,9 @@ func (pm *PaymentManager) run() {
 	}
 }
 
-func (pm *PaymentManager) RequirePayment(ctx context.Context, id peer.ID, msgSize int) {
+func (pm *PaymentManager) RequirePayment(ctx context.Context, id peer.ID, blocks int) {
 	select {
-	case pm.paymentMessages <- &requirePayment{target: id, msgSize: msgSize}:
+	case pm.paymentMessages <- &requirePayment{target: id, blocks: blocks}:
 	case <-pm.ctx.Done():
 	case <-ctx.Done():
 	}
@@ -122,11 +130,11 @@ func (pm *PaymentManager) ValidatePayment(ctx context.Context, id peer.ID, payme
 
 type requirePayment struct {
 	target peer.ID
-	msgSize int
+	blocks int
 }
 
-func (r requirePayment) handle(wm *PaymentManager) {
-
+func (r requirePayment) handle(pm *PaymentManager) {
+	pm.peerHandler.RequirePaymentMessage(r.target, r.blocks)
 }
 
 type validatePayment struct {
@@ -134,8 +142,21 @@ type validatePayment struct {
 	paymentHash string
 }
 
-func (v validatePayment) handle(wm *PaymentManager) {
-	// TODO: call API
+func (v validatePayment) handle(pm *PaymentManager) {
+	// Validate transaction
+	payments, err := pm.stellarClient.Payments(horizonclient.OperationRequest{
+		ForTransaction: v.paymentHash,
+		Join: "join=transactions",
+	})
+
+	if err != nil {
+		hError := err.(*horizonclient.Error)
+		log.Fatal("Error requesting transaction:", hError)
+	}
+
+	for _, value := range payments.Embedded.Records {
+		value.GetType()
+	}
 
 	// If payed clear wait list
 }
@@ -145,24 +166,24 @@ type processPayment struct {
 	payBlocks int
 }
 
-func (p processPayment) handle(wm *PaymentManager) {
-	targetStellarKey, err := wm.getPeerStellarKey(p.target)
+func (p processPayment) handle(pm *PaymentManager) {
+	targetStellarKey, err := pm.getPeerStellarKey(p.target)
 	if err != nil {
 		log.Error("agent version mismatch", err)
 	}
 
 	log.Debug(targetStellarKey)
 
-	// Create and fund the address on TestNet, using friendbot
-	client := horizonclient.DefaultTestNetClient
+	// Account detail need to be fetch before every transaction to refresh sequence number
+	ar := horizonclient.AccountRequest{AccountID: pm.keypair.Address()}
+	sourceAccount, err := pm.stellarClient.AccountDetail(ar)
 
-	ar := horizonclient.AccountRequest{AccountID: wm.keypair.Address()}
-	sourceAccount, err := client.AccountDetail(ar)
+	amount := float64(p.payBlocks) * 0.01 // TODO: move multiplier to const
 
 	op := txnbuild.Payment{
 		Destination: targetStellarKey,
-		Amount:      "10",
-		Asset:       txnbuild.NativeAsset{},
+		Amount:      strconv.FormatFloat(amount, 'f', -1, 64),
+		Asset:       txnbuild.NativeAsset{}, // TODO: use PiedPiper asset
 	}
 
 	// Construct the transaction that will carry the operation
@@ -174,14 +195,14 @@ func (p processPayment) handle(wm *PaymentManager) {
 	}
 
 	// Sign the transaction, serialise it to XDR, and base 64 encode it
-	txeBase64, err := tx.BuildSignEncode(wm.keypair)
+	txeBase64, err := tx.BuildSignEncode(pm.keypair)
 
 	// Submit the transaction
-	resp, err := client.SubmitTransactionXDR(txeBase64)
+	resp, err := pm.stellarClient.SubmitTransactionXDR(txeBase64)
 	if err != nil {
 		hError := err.(*horizonclient.Error)
 		log.Fatal("Error submitting transaction:", hError)
 	}
 
-	wm.peerHandler.SendPaymentMessage(p.target, resp.Hash)
+	pm.peerHandler.SendPaymentMessage(p.target, resp.Hash)
 }

@@ -68,6 +68,16 @@ func (mq *MessageQueue) AddPaymentMessage(paymentHash string) {
 	}
 }
 
+func (mq *MessageQueue) RequirePaymentMessage(blocks int) {
+	if !mq.requirePayment(blocks) {
+		return
+	}
+	select {
+	case mq.outgoingWork <- struct{}{}:
+	default:
+	}
+}
+
 // AddMessage adds new entries to an outgoing message for a given session.
 func (mq *MessageQueue) AddMessage(entries []bsmsg.Entry, ses uint64) {
 	if !mq.addEntries(entries, ses) {
@@ -167,6 +177,20 @@ func (mq *MessageQueue) addPayment(paymentHash string) bool {
 	}
 
 	mq.nextMessage.SubmitPayment(paymentHash)
+
+	return work
+}
+
+func (mq *MessageQueue) requirePayment(blocks int) bool {
+	var work bool
+	mq.nextMessageLk.Lock()
+	defer mq.nextMessageLk.Unlock()
+	// if we have no message held allocate a new one
+	if mq.nextMessage == nil {
+		mq.nextMessage = bsmsg.New(false)
+	}
+
+	mq.nextMessage.RequirePayment(blocks)
 
 	return work
 }

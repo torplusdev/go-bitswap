@@ -13,6 +13,7 @@ import (
 type PeerQueue interface {
 	AddMessage(entries []bsmsg.Entry, ses uint64)
 	AddPaymentMessage(paymentHash string)
+	RequirePaymentMessage(blocks int)
 	Startup()
 	AddWantlist(initialWants *wantlist.SessionTrackedWantlist)
 	Shutdown()
@@ -100,7 +101,13 @@ func (pm *PeerManager) SendMessage(entries []bsmsg.Entry, targets []peer.ID, fro
 func (pm *PeerManager) SendPaymentMessage(target peer.ID, paymentHash string) {
 	pqi := pm.getOrCreate(target)
 
-	pqi.pq.AddPaymentMessage(paymentHash);
+	pqi.pq.AddPaymentMessage(paymentHash)
+}
+
+func (pm *PeerManager) RequirePaymentMessage(target peer.ID, blocks int) {
+	pqi := pm.getOrCreate(target)
+
+	pqi.pq.RequirePaymentMessage(blocks)
 }
 
 func (pm *PeerManager) getOrCreate(p peer.ID) *peerQueueInstance {

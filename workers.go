@@ -104,7 +104,7 @@ func (bs *Bitswap) sendBlocks(ctx context.Context, env *engine.Envelope) {
 		log.Infof("sendblock error: %s", err)
 	}
 
-	bs.paym.RequirePayment(ctx, env.Peer, msgSize)
+	bs.paym.RequirePayment(ctx, env.Peer, len(env.Message.Blocks()))
 }
 
 func (bs *Bitswap) provideWorker(px process.Process) {
