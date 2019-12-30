@@ -26,7 +26,7 @@ type BitSwapMessage interface {
 	// Blocks returns a slice of unique blocks.
 	Blocks() []blocks.Block
 
-	RequiredPayment() int
+	RequiredPayment() float64
 
 	PaymentProve() string
 
@@ -40,7 +40,7 @@ type BitSwapMessage interface {
 	// A full wantlist is an authoritative copy, a 'non-full' wantlist is a patch-set
 	Full() bool
 
-	RequirePayment(blocks int)
+	RequirePayment(amount float64)
 
 	SubmitPayment(hash string)
 
@@ -63,8 +63,8 @@ type impl struct {
 	full     bool
 	wantlist map[cid.Cid]*Entry
 	blocks   map[cid.Cid]blocks.Block
-	requestedPaymentPerBlocks	int32
-	paymentProve				string
+	requestedPayment	float64
+	paymentProve		string
 }
 
 // New returns a new, empty bitswap message
@@ -125,8 +125,8 @@ func newMessageFromProto(pbm pb.Message) (BitSwapMessage, error) {
 	}
 
 	// Bitswap +
-	m.paymentProve = pbm.GetPaymentProve();
-	m.requestedPaymentPerBlocks = pbm.GetRequestedPaymentPerBlocks();
+	m.paymentProve = pbm.GetPaymentProve()
+	m.requestedPayment = pbm.GetRequestedPaymentAmount()
 
 	return m, nil
 }
@@ -151,12 +151,12 @@ func (m *impl) SubmitPayment(hash string) {
 	m.paymentProve = hash
 }
 
-func (m *impl) RequirePayment(blocks int) {
-	m.requestedPaymentPerBlocks = int32(blocks)
+func (m *impl) RequirePayment(amount float64) {
+	m.requestedPayment = amount
 }
 
-func (m *impl) RequiredPayment() int {
-	return int(m.requestedPaymentPerBlocks);
+func (m *impl) RequiredPayment() float64 {
+	return m.requestedPayment;
 }
 
 func (m* impl) PaymentProve() string  {
@@ -242,7 +242,7 @@ func (m *impl) ToProtoV0() *pb.Message {
 	}
 
 	// Bitswap +
-	pbm.RequestedPaymentPerBlocks = m.requestedPaymentPerBlocks;
+	pbm.RequestedPaymentAmount  = m.requestedPayment;
 	pbm.PaymentProve = m.paymentProve;
 
 	return pbm
@@ -270,8 +270,8 @@ func (m *impl) ToProtoV1() *pb.Message {
 	}
 
 	// Bitswap +
-	pbm.RequestedPaymentPerBlocks = m.requestedPaymentPerBlocks;
-	pbm.PaymentProve = m.paymentProve;
+	pbm.RequestedPaymentAmount = m.requestedPayment
+	pbm.PaymentProve = m.paymentProve
 
 	return pbm
 }
@@ -311,6 +311,6 @@ func (m *impl) Loggable() map[string]interface{} {
 		"blocks": blocks,
 		"wants":  m.Wantlist(),
 		"prove": m.paymentProve,
-		"paymentsRequest": m.requestedPaymentPerBlocks,
+		"requestedPayment": m.requestedPayment,
 	}
 }

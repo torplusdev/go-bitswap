@@ -25,7 +25,7 @@ var log = logging.Logger("bitswap")
 // PeerHandler sends changes out to the network as they get added to the payment list
 type PeerHandler interface {
 	SendPaymentMessage(target peer.ID, paymentHash string)
-	RequirePaymentMessage(target peer.ID, blocks int)
+	RequirePaymentMessage(target peer.ID, amount float64)
 }
 
 type paymentMessage interface {
@@ -50,13 +50,17 @@ type PaymentManager struct {
 }
 
 type Debt struct {
-	validationQueue	*list.List
+	validationQueue		*list.List
 
-	requested 		float64
+	requestedAmount		float64
+
+	transferredBytes int
 }
 
 const (
-	coefficient = 0.01
+	megabytePrice = 0.00002 // XLM
+
+	requestPaymentAfterBytes = 50 * 1024 * 1024 // Pey per each 50 MB including transaction fee => 50 * 0.00002 + 0.00001 = 0.00101 XLM , 1 XLM pays for 49,5GB of data
 )
 
 // New initializes a new WantManager for a given context.
@@ -193,7 +197,7 @@ func (pm *PaymentManager) validateTransactions(id peer.ID, d *Debt) {
 					log.Error("Error amount parsing:", hError)
 				}
 
-				d.requested -= amount
+				d.requestedAmount -= amount
 
 				removeElement = true
 			}
@@ -223,17 +227,17 @@ func (pm *PaymentManager) getDebt(id peer.ID) *Debt {
 	return debt
 }
 
-func (pm *PaymentManager) RequirePayment(ctx context.Context, id peer.ID, blocks int) {
+func (pm *PaymentManager) RequirePayment(ctx context.Context, id peer.ID, msgSize int) {
 	select {
-	case pm.paymentMessages <- &requirePayment{target: id, blocks: blocks}:
+	case pm.paymentMessages <- &requirePayment{target: id, msgSize: msgSize}:
 	case <-pm.ctx.Done():
 	case <-ctx.Done():
 	}
 }
 
-func (pm *PaymentManager) ProcessPayment(ctx context.Context, id peer.ID, payBlocks int) {
+func (pm *PaymentManager) ProcessPayment(ctx context.Context, id peer.ID, payAmount float64) {
 	select {
-	case pm.paymentMessages <- &processPayment{target: id, payBlocks: payBlocks}:
+	case pm.paymentMessages <- &processPayment{target: id, payAmount: payAmount}:
 	case <-pm.ctx.Done():
 	case <-ctx.Done():
 	}
@@ -249,15 +253,22 @@ func (pm *PaymentManager) ValidatePayment(ctx context.Context, id peer.ID, payme
 
 type requirePayment struct {
 	target peer.ID
-	blocks int
+	msgSize int
 }
 
 func (r requirePayment) handle(pm *PaymentManager) {
 	debt := pm.getDebt(r.target)
 
-	debt.requested += float64(r.blocks) * coefficient
+	debt.transferredBytes += r.msgSize
 
-	pm.peerHandler.RequirePaymentMessage(r.target, r.blocks)
+	if debt.transferredBytes > requestPaymentAfterBytes {
+		amount := float64(debt.transferredBytes) / 1024 * megabytePrice
+
+		pm.peerHandler.RequirePaymentMessage(r.target, amount)
+
+		debt.requestedAmount += amount
+		debt.transferredBytes = 0
+	}
 }
 
 type validatePayment struct {
@@ -272,8 +283,8 @@ func (v validatePayment) handle(pm *PaymentManager) {
 }
 
 type processPayment struct {
-	target peer.ID
-	payBlocks int
+	target 		peer.ID
+	payAmount	float64
 }
 
 // Processed by "client" peer
@@ -290,11 +301,9 @@ func (p processPayment) handle(pm *PaymentManager) {
 	ar := horizonclient.AccountRequest{AccountID: pm.keypair.Address()}
 	sourceAccount, err := pm.stellarClient.AccountDetail(ar)
 
-	amount := float64(p.payBlocks) * coefficient // TODO: move multiplier to const
-
 	op := txnbuild.Payment{
 		Destination: targetStellarKey,
-		Amount:      strconv.FormatFloat(amount, 'f', -1, 64),
+		Amount:      strconv.FormatFloat(p.payAmount, 'f', -1, 64),
 		Asset:       txnbuild.NativeAsset{}, // TODO: use PiedPiper asset
 	}
 

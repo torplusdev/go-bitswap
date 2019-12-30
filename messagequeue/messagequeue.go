@@ -68,8 +68,8 @@ func (mq *MessageQueue) AddPaymentMessage(paymentHash string) {
 	}
 }
 
-func (mq *MessageQueue) RequirePaymentMessage(blocks int) {
-	if !mq.requirePayment(blocks) {
+func (mq *MessageQueue) RequirePaymentMessage(amount float64) {
+	if !mq.requirePayment(amount) {
 		return
 	}
 	select {
@@ -181,7 +181,7 @@ func (mq *MessageQueue) addPayment(paymentHash string) bool {
 	return work
 }
 
-func (mq *MessageQueue) requirePayment(blocks int) bool {
+func (mq *MessageQueue) requirePayment(amount float64) bool {
 	var work bool
 	mq.nextMessageLk.Lock()
 	defer mq.nextMessageLk.Unlock()
@@ -190,7 +190,7 @@ func (mq *MessageQueue) requirePayment(blocks int) bool {
 		mq.nextMessage = bsmsg.New(false)
 	}
 
-	mq.nextMessage.RequirePayment(blocks)
+	mq.nextMessage.RequirePayment(amount)
 
 	return work
 }
