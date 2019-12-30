@@ -1,8 +1,11 @@
 package paymentmanager
 
 import (
+	"container/list"
 	"context"
 	"strconv"
+	"sync"
+	"time"
 
 	logging "github.com/ipfs/go-log"
 	"github.com/ipfs/go-metrics-interface"
@@ -13,6 +16,7 @@ import (
 	"github.com/stellar/go/clients/horizonclient"
 	"github.com/stellar/go/keypair"
 	"github.com/stellar/go/network"
+	"github.com/stellar/go/protocols/horizon/operations"
 	"github.com/stellar/go/txnbuild"
 )
 
@@ -41,7 +45,19 @@ type PaymentManager struct {
 	peerHandler  	PeerHandler
 	paymentGauge 	metrics.Gauge
 	keypair      	*keypair.Full
+
+	debtRegistry	map[peer.ID]*Debt
 }
+
+type Debt struct {
+	validationQueue	*list.List
+
+	requested 		float64
+}
+
+const (
+	coefficient = 0.01
+)
 
 // New initializes a new WantManager for a given context.
 func New(ctx context.Context, peerHandler PeerHandler, network bsnet.BitSwapNetwork) *PaymentManager {
@@ -49,10 +65,12 @@ func New(ctx context.Context, peerHandler PeerHandler, network bsnet.BitSwapNetw
 	paymentGauge := metrics.NewCtx(ctx, "payments_total",
 		"Number of items in payments queue.").Gauge()
 
+	registry := make(map[peer.ID]*Debt)
+
 	kp, err := keypair.ParseFull(network.GetStellarSeed())
 
 	if err != nil {
-		return nil;
+		return nil
 	}
 
 	// Create and fund the address on TestNet, using friendbot
@@ -67,13 +85,15 @@ func New(ctx context.Context, peerHandler PeerHandler, network bsnet.BitSwapNetw
 		network:		network,
 		keypair:		kp,
 		stellarClient:	client,
+		debtRegistry:	registry,
 	}
 }
-
 
 // Startup starts processing for the PayManager.
 func (pm *PaymentManager) Startup() {
 	go pm.run()
+
+	go pm.validationTimer()
 }
 
 // Shutdown ends processing for the pay manager.
@@ -104,6 +124,105 @@ func (pm *PaymentManager) run() {
 	}
 }
 
+func (pm *PaymentManager) validationTimer() {
+	for {
+		timer := time.NewTimer(5 * time.Second)
+
+		select {
+		case <- timer.C:
+			pm.validatePeers()
+			timer.Reset(5 * time.Second) // Restart timer after validation finished
+		case <-pm.ctx.Done():
+			timer.Stop()
+			return
+		}
+	}
+}
+
+func (pm *PaymentManager) validatePeers() {
+	var wg sync.WaitGroup
+
+	for id, debt := range pm.debtRegistry {
+		wg.Add(1)
+
+		go func() {
+			defer wg.Done()
+
+			pm.validateTransactions(id, debt)
+		}()
+	}
+
+	wg.Wait()
+}
+
+func (pm *PaymentManager) validateTransactions(id peer.ID, d *Debt) {
+	sourceStellarKey, err := pm.getPeerStellarKey(id)
+
+	if err != nil {
+		log.Error("agent version mismatch", err)
+	}
+
+	var next *list.Element
+	for e := d.validationQueue.Front(); e != nil; e = next {
+		hash := e.Value.(string)
+
+		ops, err := pm.stellarClient.Payments(horizonclient.OperationRequest{
+			ForTransaction: hash,
+		})
+
+		if err != nil {
+			hError := err.(*horizonclient.Error)
+			log.Error("Error requesting transaction:", hError)
+		}
+
+		removeElement := false
+
+		for _, record := range ops.Embedded.Records {
+			// check record is of type payment
+			if record.GetType() == "payment" {
+				payment := record.(operations.Payment)
+
+				if payment.From != sourceStellarKey {
+					// Fraud
+				}
+
+				amount, err := strconv.ParseFloat(payment.Amount, 64)
+
+				if err != nil {
+					hError := err.(*horizonclient.Error)
+					log.Error("Error amount parsing:", hError)
+				}
+
+				d.requested -= amount
+
+				removeElement = true
+			}
+		}
+
+		next = e.Next()
+
+		if removeElement {
+			d.validationQueue.Remove(e)
+		}
+	}
+}
+
+func (pm *PaymentManager) getDebt(id peer.ID) *Debt {
+	debt, ok := pm.debtRegistry[id]
+
+	if ok {
+		return debt
+	}
+
+	debt = &Debt {
+		validationQueue: list.New(),
+	}
+
+	pm.debtRegistry[id] = debt
+
+	return debt
+}
+
 func (pm *PaymentManager) RequirePayment(ctx context.Context, id peer.ID, blocks int) {
 	select {
 	case pm.paymentMessages <- &requirePayment{target: id, blocks: blocks}:
@@ -122,7 +241,7 @@ func (pm *PaymentManager) ProcessPayment(ctx context.Context, id peer.ID, payBlo
 
 func (pm *PaymentManager) ValidatePayment(ctx context.Context, id peer.ID, paymentHash string) {
 	select {
-	case pm.paymentMessages <- &validatePayment{target: id, paymentHash: paymentHash}:
+	case pm.paymentMessages <- &validatePayment{from: id, paymentHash: paymentHash}:
 	case <-pm.ctx.Done():
 	case <-ctx.Done():
 	}
@@ -134,31 +253,22 @@ type requirePayment struct {
 }
 
 func (r requirePayment) handle(pm *PaymentManager) {
+	debt := pm.getDebt(r.target)
+
+	debt.requested += float64(r.blocks) * coefficient
+
 	pm.peerHandler.RequirePaymentMessage(r.target, r.blocks)
 }
 
 type validatePayment struct {
-	target peer.ID
+	from 		peer.ID
 	paymentHash string
 }
 
 func (v validatePayment) handle(pm *PaymentManager) {
-	// Validate transaction
-	payments, err := pm.stellarClient.Payments(horizonclient.OperationRequest{
-		ForTransaction: v.paymentHash,
-		Join: "join=transactions",
-	})
+	debt := pm.getDebt(v.from)
 
-	if err != nil {
-		hError := err.(*horizonclient.Error)
-		log.Fatal("Error requesting transaction:", hError)
-	}
-
-	for _, value := range payments.Embedded.Records {
-		value.GetType()
-	}
-
-	// If payed clear wait list
+	debt.validationQueue.PushBack(v.paymentHash)
 }
 
 type processPayment struct {
@@ -166,8 +276,10 @@ type processPayment struct {
 	payBlocks int
 }
 
+// Processed by "client" peer
 func (p processPayment) handle(pm *PaymentManager) {
 	targetStellarKey, err := pm.getPeerStellarKey(p.target)
+
 	if err != nil {
 		log.Error("agent version mismatch", err)
 	}
@@ -178,7 +290,7 @@ func (p processPayment) handle(pm *PaymentManager) {
 	ar := horizonclient.AccountRequest{AccountID: pm.keypair.Address()}
 	sourceAccount, err := pm.stellarClient.AccountDetail(ar)
 
-	amount := float64(p.payBlocks) * 0.01 // TODO: move multiplier to const
+	amount := float64(p.payBlocks) * coefficient // TODO: move multiplier to const
 
 	op := txnbuild.Payment{
 		Destination: targetStellarKey,

@@ -405,7 +405,7 @@ func (bs *Bitswap) ReceiveMessage(ctx context.Context, p peer.ID, incoming bsmsg
 		return
 	}
 
-	requiredPayment := incoming.RequiredPayment();
+	requiredPayment := incoming.RequiredPayment()
 
 	if requiredPayment > 0 {
 		bs.paym.ProcessPayment(ctx, p, requiredPayment)

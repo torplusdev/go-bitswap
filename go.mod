@@ -3,7 +3,7 @@ module paidpiper.com/ipfs/go-bitswap
 require (
 	github.com/cskr/pubsub v1.0.2
 	github.com/gogo/protobuf v1.3.1
-	github.com/golang/protobuf v1.3.2
+	github.com/golang/protobuf v1.3.2 // indirect
 	github.com/google/uuid v1.1.1
 	github.com/ipfs/go-bitswap v0.1.10
 	github.com/ipfs/go-block-format v0.0.2
@@ -28,7 +28,7 @@ require (
 	github.com/libp2p/go-libp2p-testing v0.1.1
 	github.com/libp2p/go-msgio v0.0.4
 	github.com/multiformats/go-multiaddr v0.1.2
-	github.com/stellar/go v0.0.0-20191220224801-2b500951f171 // indirect
+	github.com/stellar/go v0.0.0-20191220224801-2b500951f171
 )
 
 replace github.com/ipfs/go-bitswap => ./
