@@ -28,16 +28,23 @@ type PeerHandler interface {
 	RequirePaymentMessage(target peer.ID, amount float64)
 }
 
+type PaymentHandler interface {
+	getPeerStellarKey(id peer.ID) (string, error)
+	getDebt(id peer.ID) *Debt
+	getOwnStellarKey() *keypair.Full
+	getStellarClient()	*horizonclient.Client
+}
+
 type paymentMessage interface {
-	handle(wm *PaymentManager)
+	handle(paymentHandler PaymentHandler, peerHandler PeerHandler)
 }
 
 // Payment manager manages payment requests and process actual payments over the Stellar network
 type PaymentManager struct {
 	paymentMessages chan paymentMessage
 
-	ctx    context.Context
-	cancel func()
+	ctx    			context.Context
+	cancel			func()
 
 	stellarClient	*horizonclient.Client
 
@@ -49,12 +56,23 @@ type PaymentManager struct {
 	debtRegistry	map[peer.ID]*Debt
 }
 
+func (pm *PaymentManager) getOwnStellarKey() *keypair.Full {
+	return pm.keypair
+}
+
+func (pm *PaymentManager) getStellarClient() *horizonclient.Client {
+	return pm.stellarClient
+}
+
 type Debt struct {
+	id peer.ID
+
 	validationQueue		*list.List
 
 	requestedAmount		float64
 
 	transferredBytes int
+	receivedBytes int
 }
 
 const (
@@ -121,7 +139,7 @@ func (pm *PaymentManager) run() {
 	for {
 		select {
 		case message := <-pm.paymentMessages:
-			message.handle(pm)
+			message.handle(pm, pm.peerHandler)
 		case <-pm.ctx.Done():
 			return
 		}
@@ -146,21 +164,21 @@ func (pm *PaymentManager) validationTimer() {
 func (pm *PaymentManager) validatePeers() {
 	var wg sync.WaitGroup
 
-	for id, debt := range pm.debtRegistry {
+	for _, debt := range pm.debtRegistry {
 		wg.Add(1)
 
 		go func() {
 			defer wg.Done()
 
-			pm.validateTransactions(id, debt)
+			debt.validateTransactions(pm)
 		}()
 	}
 
 	wg.Wait()
 }
 
-func (pm *PaymentManager) validateTransactions(id peer.ID, d *Debt) {
-	sourceStellarKey, err := pm.getPeerStellarKey(id)
+func (d *Debt) validateTransactions(pm PaymentHandler) {
+	sourceStellarKey, err := pm.getPeerStellarKey(d.id)
 
 	if err != nil {
 		log.Error("agent version mismatch", err)
@@ -170,13 +188,14 @@ func (pm *PaymentManager) validateTransactions(id peer.ID, d *Debt) {
 	for e := d.validationQueue.Front(); e != nil; e = next {
 		hash := e.Value.(string)
 
-		ops, err := pm.stellarClient.Payments(horizonclient.OperationRequest{
+		ops, err := pm.getStellarClient().Payments(horizonclient.OperationRequest{
 			ForTransaction: hash,
 		})
 
 		if err != nil {
 			hError := err.(*horizonclient.Error)
-			log.Error("Error requesting transaction:", hError)
+			log.Fatal("Error requesting transaction:", hError)
+			return
 		}
 
 		removeElement := false
@@ -188,6 +207,13 @@ func (pm *PaymentManager) validateTransactions(id peer.ID, d *Debt) {
 
 				if payment.From != sourceStellarKey {
 					// Fraud
+					log.Error("Unexpected stellar source account")
+					continue
+				}
+
+				if !payment.Base.TransactionSuccessful {
+					log.Warning("Unsuccessful payment transaction received")
+					continue
 				}
 
 				amount, err := strconv.ParseFloat(payment.Amount, 64)
@@ -219,12 +245,21 @@ func (pm *PaymentManager) getDebt(id peer.ID) *Debt {
 	}
 
 	debt = &Debt {
+		id: id,
 		validationQueue: list.New(),
 	}
 
 	pm.debtRegistry[id] = debt
 
 	return debt
+}
+
+func (pm *PaymentManager) RegisterReceivedBytes(ctx context.Context, id peer.ID, msgSize int) {
+	select {
+	case pm.paymentMessages <- &registerReceivedBytes{target: id, msgSize: msgSize}:
+	case <-pm.ctx.Done():
+	case <-ctx.Done():
+	}
 }
 
 func (pm *PaymentManager) RequirePayment(ctx context.Context, id peer.ID, msgSize int) {
@@ -251,20 +286,31 @@ func (pm *PaymentManager) ValidatePayment(ctx context.Context, id peer.ID, payme
 	}
 }
 
+type registerReceivedBytes struct {
+	target peer.ID
+	msgSize int
+}
+
+func (r registerReceivedBytes) handle(handler PaymentHandler, peerHandler PeerHandler)  {
+	debt := handler.getDebt(r.target)
+
+	debt.receivedBytes += r.msgSize
+}
+
 type requirePayment struct {
 	target peer.ID
 	msgSize int
 }
 
-func (r requirePayment) handle(pm *PaymentManager) {
-	debt := pm.getDebt(r.target)
+func (r requirePayment) handle(handler PaymentHandler, peerHandler PeerHandler) {
+	debt := handler.getDebt(r.target)
 
 	debt.transferredBytes += r.msgSize
 
 	if debt.transferredBytes > requestPaymentAfterBytes {
 		amount := float64(debt.transferredBytes) / 1024 * megabytePrice
 
-		pm.peerHandler.RequirePaymentMessage(r.target, amount)
+		peerHandler.RequirePaymentMessage(r.target, amount)
 
 		debt.requestedAmount += amount
 		debt.transferredBytes = 0
@@ -276,8 +322,8 @@ type validatePayment struct {
 	paymentHash string
 }
 
-func (v validatePayment) handle(pm *PaymentManager) {
-	debt := pm.getDebt(v.from)
+func (v validatePayment) handle(handler PaymentHandler, peerHandler PeerHandler) {
+	debt := handler.getDebt(v.from)
 
 	debt.validationQueue.PushBack(v.paymentHash)
 }
@@ -288,18 +334,34 @@ type processPayment struct {
 }
 
 // Processed by "client" peer
-func (p processPayment) handle(pm *PaymentManager) {
+func (p processPayment) handle(pm PaymentHandler, peerHandler PeerHandler) {
 	targetStellarKey, err := pm.getPeerStellarKey(p.target)
 
 	if err != nil {
-		log.Error("agent version mismatch", err)
+		log.Fatal("Peer stellar key not found", err)
+		return
 	}
 
 	log.Debug(targetStellarKey)
 
+	debt := pm.getDebt(p.target)
+
+	requiredBytes := int(p.payAmount / megabytePrice * 1024)
+
+	if requiredBytes > debt.receivedBytes {
+		log.Fatal("Peer request payment for non transferred data", err)
+		return
+	}
+
 	// Account detail need to be fetch before every transaction to refresh sequence number
-	ar := horizonclient.AccountRequest{AccountID: pm.keypair.Address()}
-	sourceAccount, err := pm.stellarClient.AccountDetail(ar)
+	ar := horizonclient.AccountRequest{AccountID: pm.getOwnStellarKey().Address()}
+	sourceAccount, err := pm.getStellarClient().AccountDetail(ar)
+
+	if err != nil {
+		hError := err.(*horizonclient.Error)
+		log.Fatal("Peer stellar account not found", hError)
+		return
+	}
 
 	op := txnbuild.Payment{
 		Destination: targetStellarKey,
@@ -316,14 +378,18 @@ func (p processPayment) handle(pm *PaymentManager) {
 	}
 
 	// Sign the transaction, serialise it to XDR, and base 64 encode it
-	txeBase64, err := tx.BuildSignEncode(pm.keypair)
+	txeBase64, err := tx.BuildSignEncode(pm.getOwnStellarKey())
 
 	// Submit the transaction
-	resp, err := pm.stellarClient.SubmitTransactionXDR(txeBase64)
+	resp, err := pm.getStellarClient().SubmitTransactionXDR(txeBase64)
+
 	if err != nil {
 		hError := err.(*horizonclient.Error)
 		log.Fatal("Error submitting transaction:", hError)
+		return
 	}
 
-	pm.peerHandler.SendPaymentMessage(p.target, resp.Hash)
+	peerHandler.SendPaymentMessage(p.target, resp.Hash)
+
+	debt.receivedBytes -= requiredBytes
 }

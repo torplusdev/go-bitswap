@@ -393,7 +393,8 @@ func (bs *Bitswap) ReceiveMessage(ctx context.Context, p peer.ID, incoming bsmsg
 		return
 	}
 
-	bs.updateReceiveCounters(iblocks)
+	bytes := bs.updateReceiveCounters(iblocks)
+
 	for _, b := range iblocks {
 		log.Debugf("[recv] block; cid=%s, peer=%s", b.Cid(), p)
 	}
@@ -404,6 +405,8 @@ func (bs *Bitswap) ReceiveMessage(ctx context.Context, p peer.ID, incoming bsmsg
 		log.Warningf("ReceiveMessage recvBlockFrom error: %s", err)
 		return
 	}
+
+	bs.paym.RegisterReceivedBytes(ctx, p, bytes)
 
 	requiredPayment := incoming.RequiredPayment()
 
@@ -418,7 +421,7 @@ func (bs *Bitswap) ReceiveMessage(ctx context.Context, p peer.ID, incoming bsmsg
 	}
 }
 
-func (bs *Bitswap) updateReceiveCounters(blocks []blocks.Block) {
+func (bs *Bitswap) updateReceiveCounters(blocks []blocks.Block) int {
 	// Check which blocks are in the datastore
 	// (Note: any errors from the blockstore are simply logged out in
 	// blockstoreHas())
@@ -426,6 +429,8 @@ func (bs *Bitswap) updateReceiveCounters(blocks []blocks.Block) {
 
 	bs.counterLk.Lock()
 	defer bs.counterLk.Unlock()
+
+	bytes := 0
 
 	// Do some accounting for each block
 	for i, b := range blocks {
@@ -441,11 +446,16 @@ func (bs *Bitswap) updateReceiveCounters(blocks []blocks.Block) {
 
 		c.blocksRecvd++
 		c.dataRecvd += uint64(blkLen)
+
+		bytes += blkLen
+
 		if has {
 			c.dupBlocksRecvd++
 			c.dupDataRecvd += uint64(blkLen)
 		}
 	}
+
+	return bytes
 }
 
 func (bs *Bitswap) blockstoreHas(blks []blocks.Block) []bool {
