@@ -307,8 +307,8 @@ func (r requirePayment) handle(handler PaymentHandler, peerHandler PeerHandler) 
 
 	debt.transferredBytes += r.msgSize
 
-	if debt.transferredBytes > requestPaymentAfterBytes {
-		amount := float64(debt.transferredBytes) / 1024 * megabytePrice
+	if debt.transferredBytes >= requestPaymentAfterBytes {
+		amount := float64(debt.transferredBytes) / 1024 / 1024 * megabytePrice
 
 		peerHandler.RequirePaymentMessage(r.target, amount)
 
@@ -346,7 +346,7 @@ func (p processPayment) handle(pm PaymentHandler, peerHandler PeerHandler) {
 
 	debt := pm.getDebt(p.target)
 
-	requiredBytes := int(p.payAmount / megabytePrice * 1024)
+	requiredBytes := int(p.payAmount / megabytePrice * 1024 * 1024)
 
 	if requiredBytes > debt.receivedBytes {
 		log.Fatal("Peer request payment for non transferred data", err)

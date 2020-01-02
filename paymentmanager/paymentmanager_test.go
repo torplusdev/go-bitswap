@@ -36,6 +36,7 @@ func (p PaymentHandlerMock) getStellarClient() *horizonclient.Client {
 
 type PeerHandlerMock struct {
 	paymentMessages map[peer.ID]string
+	requireMessages map[peer.ID]float64
 }
 
 func (p PeerHandlerMock) SendPaymentMessage(target peer.ID, paymentHash string) {
@@ -43,7 +44,7 @@ func (p PeerHandlerMock) SendPaymentMessage(target peer.ID, paymentHash string) 
 }
 
 func (p PeerHandlerMock) RequirePaymentMessage(target peer.ID, amount float64) {
-	panic("implement me")
+	p.requireMessages[target] = amount
 }
 
 func TestHandlePayment(t *testing.T) {
@@ -68,7 +69,7 @@ func TestHandlePayment(t *testing.T) {
 				validationQueue:  nil,
 				requestedAmount:  0,
 				transferredBytes: 0,
-				receivedBytes:    10 / megabytePrice * 1024,
+				receivedBytes:    10 / megabytePrice * 1024 * 1024,
 			},
 		},
 	}
@@ -154,5 +155,56 @@ func TestValidateTransactions(t *testing.T) {
 
 	if debt.validationQueue.Len() > 0 {
 		t.Errorf("Validation queue not cleared")
+	}
+}
+
+func TestRequirePayment(t *testing.T) {
+	peerKey, _ := keypair.Random()
+	ownKey, _ := keypair.Random()
+
+	client := horizonclient.DefaultTestNetClient
+
+	msg := requirePayment {
+		target: "TargetId",
+		msgSize: 1024 * 1024,
+	}
+
+	debt := Debt{
+		id:               "TargetId",
+		validationQueue:  nil,
+		requestedAmount:  0,
+		transferredBytes: 49 * 1024 * 1024, // 52 Mega transferred
+		receivedBytes:    0,
+	}
+
+	paymentMock := &PaymentHandlerMock{
+		keyMap: map[peer.ID]*keypair.Full{
+			"TargetId": peerKey,
+		},
+		ownKey: ownKey,
+		stellarClient: client,
+		debtRegistry: map[peer.ID]*Debt{
+			"TargetId": &debt,
+		},
+	}
+
+	peerMock := &PeerHandlerMock{
+		requireMessages: map[peer.ID]float64{},
+	}
+
+	msg.handle(paymentMock, peerMock)
+
+	expectedAmount := 50 * megabytePrice
+
+	if peerMock.requireMessages["TargetId"] != expectedAmount {
+		t.Errorf("Invalid price")
+	}
+
+	if debt.transferredBytes != 0 {
+		t.Errorf("Transferred bytes count not zero")
+	}
+
+	if debt.requestedAmount != expectedAmount {
+		t.Errorf("Debt amount not equal to expected")
 	}
 }
