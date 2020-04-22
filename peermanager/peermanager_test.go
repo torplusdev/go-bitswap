@@ -24,7 +24,14 @@ type fakePeer struct {
 	messagesSent chan messageSent
 }
 
+func (fp *fakePeer) InitiatePayment(paymentRequest string) {}
+
+func (fp *fakePeer) PaymentCommand(commandId string, commandBody string, commandType int32) {}
+
+func (fp *fakePeer) PaymentResponse(commandId string, commandReply string) {}
+
 func (fp *fakePeer) Startup()  {}
+
 func (fp *fakePeer) Shutdown() {}
 
 func (fp *fakePeer) AddMessage(entries []bsmsg.Entry, ses uint64) {

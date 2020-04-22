@@ -1,8 +1,13 @@
 package paymentmanager
 
 import (
+	"bytes"
 	"container/list"
 	"context"
+	"encoding/json"
+	"fmt"
+	"io"
+	"io/ioutil"
 	"strconv"
 	"sync"
 	"time"
@@ -13,26 +18,34 @@ import (
 	bsnet "github.com/ipfs/go-bitswap/network"
 	"github.com/libp2p/go-libp2p-core/peer"
 
-	"github.com/stellar/go/clients/horizonclient"
-	"github.com/stellar/go/keypair"
-	"github.com/stellar/go/network"
-	"github.com/stellar/go/protocols/horizon/operations"
-	"github.com/stellar/go/txnbuild"
+	"github.com/gorilla/mux"
+	"net/http"
 )
 
 var log = logging.Logger("bitswap")
 
+type ProcessCommandRequest struct {
+	CommandId	string
+	CommandType int32
+	CommandBody string
+	NodeId		string
+}
+
 // PeerHandler sends changes out to the network as they get added to the payment list
 type PeerHandler interface {
-	SendPaymentMessage(target peer.ID, paymentHash string)
-	RequirePaymentMessage(target peer.ID, amount float64)
+	InitiatePayment(target peer.ID, paymentRequest string)
+
+	PaymentCommand(target peer.ID, commandId string, commandBody string, commandType int32)
+
+	PaymentResponse(target peer.ID, commandId string, commandReply string)
 }
 
 type PaymentHandler interface {
-	getPeerStellarKey(id peer.ID) (string, error)
-	getDebt(id peer.ID) *Debt
-	getOwnStellarKey() *keypair.Full
-	getStellarClient()	*horizonclient.Client
+	GetDebt(id peer.ID) *Debt
+	CallProcessCommand(commandType int32, commandBody string) (string, error)
+	CallProcessPayment(paymentRequest string, requestReference string)
+	CreatePaymentInfo(amount int) (string, error)
+	CallProcessResponse(commandId string, responseBody string, nodeId string)
 }
 
 type paymentMessage interface {
@@ -41,27 +54,21 @@ type paymentMessage interface {
 
 // Payment manager manages payment requests and process actual payments over the Stellar network
 type PaymentManager struct {
-	paymentMessages chan paymentMessage
+	paymentMessages 	chan paymentMessage
 
-	ctx    			context.Context
-	cancel			func()
+	ctx    				context.Context
+	cancel				func()
 
-	stellarClient	*horizonclient.Client
+	network      		bsnet.BitSwapNetwork
+	peerHandler  		PeerHandler
+	paymentGauge 		metrics.Gauge
 
-	network      	bsnet.BitSwapNetwork
-	peerHandler  	PeerHandler
-	paymentGauge 	metrics.Gauge
-	keypair      	*keypair.Full
+	debtRegistry		map[peer.ID]*Debt
 
-	debtRegistry	map[peer.ID]*Debt
-}
+	commandListenPort	int
+	channelUrl			string
 
-func (pm *PaymentManager) getOwnStellarKey() *keypair.Full {
-	return pm.keypair
-}
-
-func (pm *PaymentManager) getStellarClient() *horizonclient.Client {
-	return pm.stellarClient
+	server				*http.Server
 }
 
 type Debt struct {
@@ -69,15 +76,14 @@ type Debt struct {
 
 	validationQueue		*list.List
 
-	requestedAmount		float64
+	requestedAmount		int
 
-	transferredBytes int
-	receivedBytes int
+	transferredBytes 	int
+
+	receivedBytes 		int
 }
 
 const (
-	megabytePrice = 0.00002 // XLM
-
 	requestPaymentAfterBytes = 50 * 1024 * 1024 // Pey per each 50 MB including transaction fee => 50 * 0.00002 + 0.00001 = 0.00101 XLM , 1 XLM pays for 49,5GB of data
 )
 
@@ -89,15 +95,6 @@ func New(ctx context.Context, peerHandler PeerHandler, network bsnet.BitSwapNetw
 
 	registry := make(map[peer.ID]*Debt)
 
-	kp, err := keypair.ParseFull(network.GetStellarSeed())
-
-	if err != nil {
-		return nil
-	}
-
-	// Create and fund the address on TestNet, using friendbot
-	client := horizonclient.DefaultTestNetClient
-
 	return &PaymentManager{
 		paymentMessages:  make(chan paymentMessage, 10),
 		ctx:           	ctx,
@@ -105,10 +102,13 @@ func New(ctx context.Context, peerHandler PeerHandler, network bsnet.BitSwapNetw
 		peerHandler:   	peerHandler,
 		paymentGauge: 	paymentGauge,
 		network:		network,
-		keypair:		kp,
-		stellarClient:	client,
 		debtRegistry:	registry,
 	}
+}
+
+func (pm *PaymentManager) SetPPChannelSettings(commandListenPort int, channelUrl string) {
+	pm.commandListenPort = commandListenPort
+	pm.channelUrl		 = channelUrl
 }
 
 // Startup starts processing for the PayManager.
@@ -116,21 +116,32 @@ func (pm *PaymentManager) Startup() {
 	go pm.run()
 
 	go pm.validationTimer()
+
+	go pm.startCommandServer()
 }
 
 // Shutdown ends processing for the pay manager.
 func (pm *PaymentManager) Shutdown() {
 	pm.cancel()
+
+	pm.server.Shutdown(pm.ctx)
 }
 
-func (pm *PaymentManager) getPeerStellarKey(id peer.ID) (string, error) {
-	key, err := pm.network.GetFromPeerStore(id, "StellarKey")
+func (pm *PaymentManager) startCommandServer() {
+	router := mux.NewRouter()
 
-	if err != nil {
-		return "", err
+	router.HandleFunc("/api/command", pm.ProcessCommand).Methods("POST")
+
+	pm.server = &http.Server{
+		Addr: fmt.Sprintf(":%d",pm.commandListenPort),
+		Handler: router,
 	}
 
-	return key.(string), nil
+	err := pm.server.ListenAndServe()
+
+	if err != nil {
+		panic(err)
+	}
 }
 
 func (pm *PaymentManager) run() {
@@ -178,66 +189,10 @@ func (pm *PaymentManager) validatePeers() {
 }
 
 func (d *Debt) validateTransactions(pm PaymentHandler) {
-	sourceStellarKey, err := pm.getPeerStellarKey(d.id)
 
-	if err != nil {
-		log.Error("agent version mismatch", err)
-	}
-
-	var next *list.Element
-	for e := d.validationQueue.Front(); e != nil; e = next {
-		hash := e.Value.(string)
-
-		ops, err := pm.getStellarClient().Payments(horizonclient.OperationRequest{
-			ForTransaction: hash,
-		})
-
-		if err != nil {
-			hError := err.(*horizonclient.Error)
-			log.Fatal("Error requesting transaction:", hError)
-			return
-		}
-
-		removeElement := false
-
-		for _, record := range ops.Embedded.Records {
-			// check record is of type payment
-			if record.GetType() == "payment" {
-				payment := record.(operations.Payment)
-
-				if payment.From != sourceStellarKey {
-					// Fraud
-					log.Error("Unexpected stellar source account")
-					continue
-				}
-
-				if !payment.Base.TransactionSuccessful {
-					log.Warning("Unsuccessful payment transaction received")
-					continue
-				}
-
-				amount, err := strconv.ParseFloat(payment.Amount, 64)
-
-				if err != nil {
-					hError := err.(*horizonclient.Error)
-					log.Error("Error amount parsing:", hError)
-				}
-
-				d.requestedAmount -= amount
-
-				removeElement = true
-			}
-		}
-
-		next = e.Next()
-
-		if removeElement {
-			d.validationQueue.Remove(e)
-		}
-	}
 }
 
-func (pm *PaymentManager) getDebt(id peer.ID) *Debt {
+func (pm *PaymentManager) GetDebt(id peer.ID) *Debt {
 	debt, ok := pm.debtRegistry[id]
 
 	if ok {
@@ -254,14 +209,51 @@ func (pm *PaymentManager) getDebt(id peer.ID) *Debt {
 	return debt
 }
 
-func (pm *PaymentManager) RegisterReceivedBytes(ctx context.Context, id peer.ID, msgSize int) {
+func (pm *PaymentManager) ProcessCommand(w http.ResponseWriter, r *http.Request) {
+	// Extract command request from the request and forward it to peer
+	command := &ProcessCommandRequest{}
+
+	err := json.NewDecoder(r.Body).Decode(command)
+
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		io.WriteString(w, err.Error())
+
+		return
+	}
+
+	targetId, err := peer.IDFromString(command.NodeId)
+
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		io.WriteString(w, err.Error())
+
+		return
+	}
+
 	select {
-	case pm.paymentMessages <- &registerReceivedBytes{target: id, msgSize: msgSize}:
+	case pm.paymentMessages <- &processIncomingPaymentCommand{
+		target:      targetId,
+		commandId:   command.CommandId,
+		commandType: command.CommandType,
+		commandBody: command.CommandBody,
+	}:
+		w.WriteHeader(http.StatusOK)
+	case <-pm.ctx.Done():
+		w.WriteHeader(http.StatusRequestTimeout)
+	}
+}
+
+// Process payment request received from {id} peer
+func (pm *PaymentManager) ProcessPaymentRequest(ctx context.Context, id peer.ID, paymentRequest string) {
+	select {
+	case pm.paymentMessages <- &initiatePayment{from: id, paymentRequest: paymentRequest}:
 	case <-pm.ctx.Done():
 	case <-ctx.Done():
 	}
 }
 
+// Register {msgSize} bytes sent to {id} peer and initiate payment request
 func (pm *PaymentManager) RequirePayment(ctx context.Context, id peer.ID, msgSize int) {
 	select {
 	case pm.paymentMessages <- &requirePayment{target: id, msgSize: msgSize}:
@@ -270,29 +262,49 @@ func (pm *PaymentManager) RequirePayment(ctx context.Context, id peer.ID, msgSiz
 	}
 }
 
-func (pm *PaymentManager) ProcessPayment(ctx context.Context, id peer.ID, payAmount float64) {
+// Register {msgSize} bytes received from {id} peer
+func (pm *PaymentManager) RegisterReceivedBytes(ctx context.Context, id peer.ID, msgSize int) {
 	select {
-	case pm.paymentMessages <- &processPayment{target: id, payAmount: payAmount}:
+	case pm.paymentMessages <- &registerReceivedBytes{from: id, msgSize: msgSize}:
 	case <-pm.ctx.Done():
 	case <-ctx.Done():
 	}
 }
 
-func (pm *PaymentManager) ValidatePayment(ctx context.Context, id peer.ID, paymentHash string) {
+// Process payment command received from {id} peer
+func (pm *PaymentManager) ProcessPaymentCommand(ctx context.Context, id peer.ID, commandId string, commandBody string, commandType int32) {
 	select {
-	case pm.paymentMessages <- &validatePayment{from: id, paymentHash: paymentHash}:
+	case pm.paymentMessages <- &processOutgoingPaymentCommand{from: id, commandId: commandId, commandBody: commandBody, commandType: commandType}:
 	case <-pm.ctx.Done():
 	case <-ctx.Done():
 	}
+}
+
+// Process payment response received from {id} peer
+func (pm *PaymentManager) ProcessPaymentResponse(ctx context.Context, id peer.ID, commandId string, commandReply string) {
+	select {
+	case pm.paymentMessages <- &processPaymentResponse{from: id, commandId: commandId, commandReply: commandReply}:
+	case <-pm.ctx.Done():
+	case <-ctx.Done():
+	}
+}
+
+type initiatePayment struct {
+	from peer.ID
+	paymentRequest string
+}
+
+func (i initiatePayment) handle(pm PaymentHandler, peerHandler PeerHandler)  {
+	pm.CallProcessPayment(i.paymentRequest, i.from.String())
 }
 
 type registerReceivedBytes struct {
-	target peer.ID
+	from peer.ID
 	msgSize int
 }
 
 func (r registerReceivedBytes) handle(handler PaymentHandler, peerHandler PeerHandler)  {
-	debt := handler.getDebt(r.target)
+	debt := handler.GetDebt(r.from)
 
 	debt.receivedBytes += r.msgSize
 }
@@ -303,93 +315,188 @@ type requirePayment struct {
 }
 
 func (r requirePayment) handle(handler PaymentHandler, peerHandler PeerHandler) {
-	debt := handler.getDebt(r.target)
+	debt := handler.GetDebt(r.target)
 
 	debt.transferredBytes += r.msgSize
 
 	if debt.transferredBytes >= requestPaymentAfterBytes {
-		amount := float64(debt.transferredBytes) / 1024 / 1024 * megabytePrice
+		amount := debt.transferredBytes
 
-		peerHandler.RequirePaymentMessage(r.target, amount)
+		paymentRequest, err := handler.CreatePaymentInfo(amount)
+
+		if err != nil {
+			log.Error("create payment info failed: %s", err.Error())
+
+			return
+		}
+
+		peerHandler.InitiatePayment(r.target, paymentRequest)
 
 		debt.requestedAmount += amount
 		debt.transferredBytes = 0
 	}
 }
 
-type validatePayment struct {
-	from 		peer.ID
-	paymentHash string
-}
-
-func (v validatePayment) handle(handler PaymentHandler, peerHandler PeerHandler) {
-	debt := handler.getDebt(v.from)
-
-	debt.validationQueue.PushBack(v.paymentHash)
-}
-
-type processPayment struct {
+type processIncomingPaymentCommand struct {
 	target 		peer.ID
-	payAmount	float64
+	commandId	string
+	commandType int32
+	commandBody string
 }
 
-// Processed by "client" peer
-func (p processPayment) handle(pm PaymentHandler, peerHandler PeerHandler) {
-	targetStellarKey, err := pm.getPeerStellarKey(p.target)
+func (p processIncomingPaymentCommand) handle(pm PaymentHandler, peerHandler PeerHandler) {
+	peerHandler.PaymentCommand(p.target, p.commandId, p.commandBody, p.commandType)
+}
+
+type processPaymentResponse struct {
+	from 			peer.ID
+	commandId		string
+	commandReply	string
+}
+
+func (v processPaymentResponse) handle(handler PaymentHandler, peerHandler PeerHandler) {
+	handler.CallProcessResponse(v.commandId, v.commandReply, v.from.String())
+}
+
+type processOutgoingPaymentCommand struct {
+	from 		peer.ID
+	commandId	string
+	commandBody	string
+	commandType	int32
+}
+
+func (p processOutgoingPaymentCommand) handle(pm PaymentHandler, peerHandler PeerHandler) {
+	response, err := pm.CallProcessCommand(p.commandType, p.commandBody)
 
 	if err != nil {
-		log.Fatal("Peer stellar key not found", err)
+		log.Error("process command failed: %s", err.Error())
+
 		return
 	}
 
-	log.Debug(targetStellarKey)
+	peerHandler.PaymentResponse(p.from, p.commandId, response)
+}
 
-	debt := pm.getDebt(p.target)
-
-	requiredBytes := int(p.payAmount / megabytePrice * 1024 * 1024)
-
-	if requiredBytes > debt.receivedBytes {
-		log.Fatal("Peer request payment for non transferred data", err)
-		return
+func (pm *PaymentManager) CallProcessResponse(commandId string, responseBody string, nodeId string) {
+	values := map[string]string {
+		"CommandId":   	commandId,
+		"ResponseBody": responseBody,
+		"NodeId": 		nodeId,
 	}
 
-	// Account detail need to be fetch before every transaction to refresh sequence number
-	ar := horizonclient.AccountRequest{AccountID: pm.getOwnStellarKey().Address()}
-	sourceAccount, err := pm.getStellarClient().AccountDetail(ar)
+	jsonValue, err := json.Marshal(values)
 
 	if err != nil {
-		hError := err.(*horizonclient.Error)
-		log.Fatal("Peer stellar account not found", hError)
+		log.Error("failed to serialize process command response: %s", err.Error())
+
 		return
 	}
 
-	op := txnbuild.Payment{
-		Destination: targetStellarKey,
-		Amount:      strconv.FormatFloat(p.payAmount, 'f', -1, 64),
-		Asset:       txnbuild.NativeAsset{}, // TODO: use PiedPiper asset
-	}
-
-	// Construct the transaction that will carry the operation
-	tx := txnbuild.Transaction{
-		SourceAccount: &sourceAccount,
-		Operations:    []txnbuild.Operation{&op},
-		Timebounds:    txnbuild.NewTimeout(300),
-		Network:       network.TestNetworkPassphrase,
-	}
-
-	// Sign the transaction, serialise it to XDR, and base 64 encode it
-	txeBase64, err := tx.BuildSignEncode(pm.getOwnStellarKey())
-
-	// Submit the transaction
-	resp, err := pm.getStellarClient().SubmitTransactionXDR(txeBase64)
+	reply, err := http.Post(fmt.Sprintf("%s/api/gateway/processResponse", pm.channelUrl), "application/json", bytes.NewBuffer(jsonValue))
 
 	if err != nil {
-		hError := err.(*horizonclient.Error)
-		log.Fatal("Error submitting transaction:", hError)
+		log.Error("failed to call process command response: %s", err.Error())
+
 		return
 	}
 
-	peerHandler.SendPaymentMessage(p.target, resp.Hash)
+	log.Info("process command response call status: %d", reply.StatusCode)
+}
 
-	debt.receivedBytes -= requiredBytes
+
+func (pm *PaymentManager) CallProcessCommand(commandType int32, commandBody string) (string, error) {
+	values := map[string]string {
+		"CommandType":   strconv.Itoa(int(commandType)),
+		"CommandBody":   commandBody,
+	}
+
+	jsonValue, err := json.Marshal(values)
+
+	if err != nil {
+		log.Error("failed to serialize process command request: %s", err.Error())
+
+		return "", err
+	}
+
+	reply, err := http.Post(fmt.Sprintf("%s/api/utility/processCommand", pm.channelUrl), "application/json", bytes.NewBuffer(jsonValue))
+
+	if err != nil {
+		log.Error("failed to call process command: %s", err.Error())
+
+		return "", err
+	}
+
+	defer reply.Body.Close()
+
+	log.Info("process command call status: %d", reply.StatusCode)
+
+	bodyBytes, err := ioutil.ReadAll(reply.Body)
+
+	if err != nil {
+		log.Error("failed to read process command response body: %s", err.Error())
+
+		return "", err
+	}
+
+	return string(bodyBytes), nil
+}
+
+func (pm *PaymentManager) CallProcessPayment(paymentRequest string, requestReference string) {
+	values := map[string]string {
+		"CallbackUrl":      fmt.Sprintf("http://localhost:%d/api/command", pm.commandListenPort),
+		"PaymentRequest":   paymentRequest,
+		"RequestReference": requestReference,
+	}
+
+	jsonValue, err := json.Marshal(values)
+
+	if err != nil {
+		log.Error("failed to serialize process payment request: %s", err.Error())
+
+		return
+	}
+
+	reply, err := http.Post(fmt.Sprintf("%s/api/gateway/processPayment", pm.channelUrl), "application/json", bytes.NewBuffer(jsonValue))
+
+	if err != nil {
+		log.Error("failed to call process payment: %s", err.Error())
+
+		return
+	}
+
+	log.Info("process payment call status: %d", reply.StatusCode)
+}
+
+func (pm *PaymentManager) CreatePaymentInfo(amount int) (string, error) {
+	values := map[string]string{"ServiceType": "ipfs", "CommodityType": "data", "Amount": strconv.Itoa(amount)}
+
+	jsonValue, err := json.Marshal(values)
+
+	if err != nil {
+		log.Error("failed to serialize create payment request: %s", err.Error())
+
+		return "", err
+	}
+
+	reply, err := http.Post(fmt.Sprintf("%s/api/utility/createPaymentInfo", pm.channelUrl), "application/json", bytes.NewBuffer(jsonValue))
+
+	if err != nil {
+		log.Error("failed to call create payment: %s", err.Error())
+
+		return "", err
+	}
+
+	defer reply.Body.Close()
+
+	log.Info("create payment call status: %d", reply.StatusCode)
+
+	bodyBytes, err := ioutil.ReadAll(reply.Body)
+
+	if err != nil {
+		log.Error("failed to read create payment response body: %s", err.Error())
+
+		return "", err
+	}
+
+	return string(bodyBytes), nil
 }

@@ -26,6 +26,26 @@ message Message {
   Wantlist wantlist = 1 [(gogoproto.nullable) = false];
   repeated bytes blocks = 2;		// used to send Blocks in bitswap 1.0.0
   repeated Block payload = 3 [(gogoproto.nullable) = false];		// used to send Blocks in bitswap 1.1.0
-  double requestedPaymentAmount = 4; // Bitswap+ addon
-  string paymentProve = 5;           // Bitswap+ addon
+
+  // Bitswap+ addon
+  oneof PaymentMessage {
+      InitiatePayment initiatePayment = 4;
+      PaymentCommand  paymentCommand = 5;
+      PaymentResponse paymentResponse = 6;
+  }
+
+  message InitiatePayment {
+      string paymentRequest = 1;
+  }
+
+  message PaymentCommand {
+      string commandId = 1;
+      string commandBody = 2;
+      int32  commandType = 3;
+  }
+
+  message PaymentResponse {
+      string commandId = 1;
+      string commandReply = 2;
+  }
 }

@@ -12,8 +12,9 @@ import (
 // PeerQueue provides a queue of messages to be sent for a single peer.
 type PeerQueue interface {
 	AddMessage(entries []bsmsg.Entry, ses uint64)
-	AddPaymentMessage(paymentHash string)
-	RequirePaymentMessage(amount float64)
+	InitiatePayment(paymentRequest string)
+	PaymentCommand(commandId string, commandBody string, commandType int32)
+	PaymentResponse(commandId string, commandReply string)
 	Startup()
 	AddWantlist(initialWants *wantlist.SessionTrackedWantlist)
 	Shutdown()
@@ -98,16 +99,22 @@ func (pm *PeerManager) SendMessage(entries []bsmsg.Entry, targets []peer.ID, fro
 	}
 }
 
-func (pm *PeerManager) SendPaymentMessage(target peer.ID, paymentHash string) {
+func (pm *PeerManager) InitiatePayment(target peer.ID, paymentRequest string) {
 	pqi := pm.getOrCreate(target)
 
-	pqi.pq.AddPaymentMessage(paymentHash)
+	pqi.pq.InitiatePayment(paymentRequest)
 }
 
-func (pm *PeerManager) RequirePaymentMessage(target peer.ID, amount float64) {
+func (pm *PeerManager) PaymentCommand(target peer.ID, commandId string, commandBody string, commandType int32) {
 	pqi := pm.getOrCreate(target)
 
-	pqi.pq.RequirePaymentMessage(amount)
+	pqi.pq.PaymentCommand(commandId, commandBody, commandType)
+}
+
+func (pm *PeerManager) PaymentResponse(target peer.ID, commandId string, commandReply string) {
+	pqi := pm.getOrCreate(target)
+
+	pqi.pq.PaymentResponse(commandId, commandReply)
 }
 
 func (pm *PeerManager) getOrCreate(p peer.ID) *peerQueueInstance {

@@ -5,13 +5,13 @@ import (
 	"fmt"
 	"io"
 
-	blocks "github.com/ipfs/go-block-format"
 	pb "github.com/ipfs/go-bitswap/message/pb"
-	wantlist "github.com/ipfs/go-bitswap/wantlist"
+	"github.com/ipfs/go-bitswap/wantlist"
+	blocks "github.com/ipfs/go-block-format"
 
-	cid "github.com/ipfs/go-cid"
+	"github.com/ipfs/go-cid"
 	pool "github.com/libp2p/go-buffer-pool"
-	msgio "github.com/libp2p/go-msgio"
+	"github.com/libp2p/go-msgio"
 
 	"github.com/libp2p/go-libp2p-core/network"
 )
@@ -26,10 +26,6 @@ type BitSwapMessage interface {
 	// Blocks returns a slice of unique blocks.
 	Blocks() []blocks.Block
 
-	RequiredPayment() float64
-
-	PaymentProve() string
-
 	// AddEntry adds an entry to the Wantlist.
 	AddEntry(key cid.Cid, priority int)
 
@@ -40,14 +36,23 @@ type BitSwapMessage interface {
 	// A full wantlist is an authoritative copy, a 'non-full' wantlist is a patch-set
 	Full() bool
 
-	RequirePayment(amount float64)
-
-	SubmitPayment(hash string)
-
 	AddBlock(blocks.Block)
 	Exportable
 
 	Loggable() map[string]interface{}
+
+	// Bitswap +
+	InitiatePayment(paymentRequest string)
+
+	PaymentCommand(commandId string, commandBody string, commandType int32)
+
+	PaymentResponse(commandId string, commandReply string)
+
+	GetInitiatePayment() *InitiatePayment
+
+	GetPaymentCommand() *PaymentCommand
+
+	GetPaymentResponse() *PaymentResponse
 }
 
 // Exportable is an interface for structures than can be
@@ -63,8 +68,49 @@ type impl struct {
 	full     bool
 	wantlist map[cid.Cid]*Entry
 	blocks   map[cid.Cid]blocks.Block
-	requestedPayment	float64
-	paymentProve		string
+
+	initiatePayment	*InitiatePayment
+	paymentCommand	*PaymentCommand
+	paymentResponse *PaymentResponse
+}
+
+type InitiatePayment struct {
+	paymentRequest		string
+}
+
+func (i *InitiatePayment) GetPaymentRequest() string {
+	return i.paymentRequest
+}
+
+type PaymentCommand struct {
+	commandId 	string
+	commandBody string
+	commandType int32
+}
+
+func (i *PaymentCommand) GetCommandId() string {
+	return i.commandId
+}
+
+func (i *PaymentCommand) GetCommandBody() string {
+	return i.commandBody
+}
+
+func (i *PaymentCommand) GetCommandType() int32 {
+	return i.commandType
+}
+
+type PaymentResponse struct {
+	commandId		string
+	commandReply 	string
+}
+
+func (i *PaymentResponse) GetCommandId() string {
+	return i.commandId
+}
+
+func (i *PaymentResponse) GetCommandReply() string {
+	return i.commandReply
 }
 
 // New returns a new, empty bitswap message
@@ -90,7 +136,7 @@ type Entry struct {
 func newMessageFromProto(pbm pb.Message) (BitSwapMessage, error) {
 	m := newMsg(pbm.Wantlist.Full)
 	for _, e := range pbm.Wantlist.Entries {
-		c, err := cid.Cast([]byte(e.Block))
+		c, err := cid.Cast(e.Block)
 		if err != nil {
 			return nil, fmt.Errorf("incorrectly formatted cid in wantlist: %s", err)
 		}
@@ -125,8 +171,23 @@ func newMessageFromProto(pbm pb.Message) (BitSwapMessage, error) {
 	}
 
 	// Bitswap +
-	m.paymentProve = pbm.GetPaymentProve()
-	m.requestedPayment = pbm.GetRequestedPaymentAmount()
+	if pbm.PaymentMessage != nil {
+		switch paymentMessage := pbm.PaymentMessage.(type) {
+		case *pb.Message_PaymentCommand_:
+			m.paymentCommand = &PaymentCommand {
+				commandBody: paymentMessage.PaymentCommand.CommandBody,
+				commandType:     paymentMessage.PaymentCommand.CommandType,
+			}
+		case *pb.Message_PaymentResponse_:
+			m.paymentResponse = &PaymentResponse {
+				commandReply: paymentMessage.PaymentResponse.CommandReply,
+			}
+		case *pb.Message_InitiatePayment_:
+			m.initiatePayment = &InitiatePayment {
+				paymentRequest: paymentMessage.InitiatePayment.PaymentRequest,
+			}
+		}
+	}
 
 	return m, nil
 }
@@ -147,20 +208,38 @@ func (m *impl) Wantlist() []Entry {
 	return out
 }
 
-func (m *impl) SubmitPayment(hash string) {
-	m.paymentProve = hash
+
+func (m *impl) GetInitiatePayment() *InitiatePayment {
+	return m.initiatePayment
 }
 
-func (m *impl) RequirePayment(amount float64) {
-	m.requestedPayment = amount
+func (m *impl) GetPaymentCommand() *PaymentCommand {
+	return m.paymentCommand
 }
 
-func (m *impl) RequiredPayment() float64 {
-	return m.requestedPayment;
+func (m *impl) GetPaymentResponse() *PaymentResponse {
+	return m.paymentResponse
 }
 
-func (m* impl) PaymentProve() string  {
-	return m.paymentProve;
+func (m *impl) InitiatePayment(paymentRequest string) {
+	m.initiatePayment = &InitiatePayment{
+		paymentRequest,
+	}
+}
+
+func (m *impl) PaymentCommand(commandId string, commandBody string, commandType int32) {
+	m.paymentCommand = &PaymentCommand{
+		commandId,
+		commandBody,
+		commandType,
+	}
+}
+
+func (m *impl) PaymentResponse(commandId string, commandReply string) {
+	m.paymentResponse = &PaymentResponse{
+		commandId,
+		commandReply,
+	}
 }
 
 func (m *impl) Blocks() []blocks.Block {
@@ -213,14 +292,14 @@ func FromMsgReader(r msgio.Reader) (BitSwapMessage, error) {
 		return nil, err
 	}
 
-	var pb pb.Message
-	err = pb.Unmarshal(msg)
+	var pbm pb.Message
+	err = pbm.Unmarshal(msg)
 	r.ReleaseMsg(msg)
 	if err != nil {
 		return nil, err
 	}
 
-	return newMessageFromProto(pb)
+	return newMessageFromProto(pbm)
 }
 
 func (m *impl) ToProtoV0() *pb.Message {
@@ -235,19 +314,46 @@ func (m *impl) ToProtoV0() *pb.Message {
 	}
 	pbm.Wantlist.Full = m.full
 
-	blocks := m.Blocks()
-	pbm.Blocks = make([][]byte, 0, len(blocks))
-	for _, b := range blocks {
+	messageBlocks := m.Blocks()
+	pbm.Blocks = make([][]byte, 0, len(messageBlocks))
+	for _, b := range messageBlocks {
 		pbm.Blocks = append(pbm.Blocks, b.RawData())
 	}
 
 	// Bitswap +
-	pbm.RequestedPaymentAmount  = m.requestedPayment;
-	pbm.PaymentProve = m.paymentProve;
+	m.ToPaymentProto(pbm)
 
 	return pbm
 }
 
+func (m * impl) ToPaymentProto(pbm *pb.Message) {
+	if m.initiatePayment != nil {
+		pbm.PaymentMessage = &pb.Message_InitiatePayment_ {
+			InitiatePayment: &pb.Message_InitiatePayment {
+				PaymentRequest: m.initiatePayment.paymentRequest,
+			},
+		}
+	}
+
+	if m.paymentCommand != nil {
+		pbm.PaymentMessage = &pb.Message_PaymentCommand_{
+			PaymentCommand: &pb.Message_PaymentCommand{
+				CommandId: m.paymentCommand.commandId,
+				CommandBody: m.paymentCommand.commandBody,
+				CommandType: m.paymentCommand.commandType,
+			},
+		}
+	}
+
+	if m.paymentResponse != nil {
+		pbm.PaymentMessage = &pb.Message_PaymentResponse_{
+			PaymentResponse: &pb.Message_PaymentResponse{
+				CommandId: m.paymentResponse.commandId,
+				CommandReply: m.paymentResponse.commandReply,
+			},
+		}
+	}
+}
 func (m *impl) ToProtoV1() *pb.Message {
 	pbm := new(pb.Message)
 	pbm.Wantlist.Entries = make([]pb.Message_Wantlist_Entry, 0, len(m.wantlist))
@@ -260,9 +366,9 @@ func (m *impl) ToProtoV1() *pb.Message {
 	}
 	pbm.Wantlist.Full = m.full
 
-	blocks := m.Blocks()
-	pbm.Payload = make([]pb.Message_Block, 0, len(blocks))
-	for _, b := range blocks {
+	messageBlocks := m.Blocks()
+	pbm.Payload = make([]pb.Message_Block, 0, len(messageBlocks))
+	for _, b := range messageBlocks {
 		pbm.Payload = append(pbm.Payload, pb.Message_Block{
 			Data:   b.RawData(),
 			Prefix: b.Cid().Prefix().Bytes(),
@@ -270,8 +376,7 @@ func (m *impl) ToProtoV1() *pb.Message {
 	}
 
 	// Bitswap +
-	pbm.RequestedPaymentAmount = m.requestedPayment
-	pbm.PaymentProve = m.paymentProve
+	m.ToPaymentProto(pbm)
 
 	return pbm
 }
@@ -303,14 +408,16 @@ func write(w io.Writer, m *pb.Message) error {
 }
 
 func (m *impl) Loggable() map[string]interface{} {
-	blocks := make([]string, 0, len(m.blocks))
+	messageBlocks := make([]string, 0, len(m.blocks))
 	for _, v := range m.blocks {
-		blocks = append(blocks, v.Cid().String())
+		messageBlocks = append(messageBlocks, v.Cid().String())
 	}
+
 	return map[string]interface{}{
-		"blocks": blocks,
+		"blocks": messageBlocks,
 		"wants":  m.Wantlist(),
-		"prove": m.paymentProve,
-		"requestedPayment": m.requestedPayment,
+		"initiatePayment": m.initiatePayment,
+		"paymentCommand": m.paymentCommand,
+		"paymentResponse": m.paymentResponse,
 	}
 }

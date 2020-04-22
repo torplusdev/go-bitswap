@@ -58,8 +58,8 @@ func New(ctx context.Context, p peer.ID, network MessageNetwork) *MessageQueue {
 	}
 }
 
-func (mq *MessageQueue) AddPaymentMessage(paymentHash string) {
-	if !mq.addPayment(paymentHash) {
+func (mq *MessageQueue) InitiatePayment(paymentRequest string) {
+	if !mq.initiatePayment(paymentRequest) {
 		return
 	}
 	select {
@@ -68,8 +68,18 @@ func (mq *MessageQueue) AddPaymentMessage(paymentHash string) {
 	}
 }
 
-func (mq *MessageQueue) RequirePaymentMessage(amount float64) {
-	if !mq.requirePayment(amount) {
+func (mq *MessageQueue) PaymentCommand(commandId string, commandBody string, commandType int32) {
+	if !mq.paymentCommand(commandId, commandBody, commandType) {
+		return
+	}
+	select {
+	case mq.outgoingWork <- struct{}{}:
+	default:
+	}
+}
+
+func (mq *MessageQueue) PaymentResponse(commandId string, commandReply string) {
+	if !mq.paymentResponse(commandId, commandReply) {
 		return
 	}
 	select {
@@ -167,7 +177,7 @@ func (mq *MessageQueue) rebroadcastWantlist() {
 	mq.addWantlist()
 }
 
-func (mq *MessageQueue) addPayment(paymentHash string) bool {
+func (mq *MessageQueue) initiatePayment(paymentRequest string) bool {
 	var work bool
 	mq.nextMessageLk.Lock()
 	defer mq.nextMessageLk.Unlock()
@@ -176,12 +186,12 @@ func (mq *MessageQueue) addPayment(paymentHash string) bool {
 		mq.nextMessage = bsmsg.New(false)
 	}
 
-	mq.nextMessage.SubmitPayment(paymentHash)
+	mq.nextMessage.InitiatePayment(paymentRequest)
 
 	return work
 }
 
-func (mq *MessageQueue) requirePayment(amount float64) bool {
+func (mq *MessageQueue) paymentCommand(commandId string, commandBody string, commandType int32) bool {
 	var work bool
 	mq.nextMessageLk.Lock()
 	defer mq.nextMessageLk.Unlock()
@@ -190,7 +200,21 @@ func (mq *MessageQueue) requirePayment(amount float64) bool {
 		mq.nextMessage = bsmsg.New(false)
 	}
 
-	mq.nextMessage.RequirePayment(amount)
+	mq.nextMessage.PaymentCommand(commandId, commandBody, commandType)
+
+	return work
+}
+
+func (mq *MessageQueue) paymentResponse(commandId string, commandReply string) bool {
+	var work bool
+	mq.nextMessageLk.Lock()
+	defer mq.nextMessageLk.Unlock()
+	// if we have no message held allocate a new one
+	if mq.nextMessage == nil {
+		mq.nextMessage = bsmsg.New(false)
+	}
+
+	mq.nextMessage.PaymentResponse(commandId, commandReply)
 
 	return work
 }

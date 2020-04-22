@@ -28,7 +28,7 @@ var log = logging.Logger("bitswap_network")
 var sendMessageTimeout = time.Minute * 10
 
 // NewFromIpfsHost returns a BitSwapNetwork supported by underlying IPFS host.
-func NewFromIpfsHost(host host.Host, r routing.ContentRouting, stellarSeed string, opts ...NetOpt) BitSwapNetwork {
+func NewFromIpfsHost(host host.Host, r routing.ContentRouting, opts ...NetOpt) BitSwapNetwork {
 	s := Settings{}
 	for _, opt := range opts {
 		opt(&s)
@@ -37,7 +37,6 @@ func NewFromIpfsHost(host host.Host, r routing.ContentRouting, stellarSeed strin
 	bitswapNetwork := impl{
 		host:    host,
 		routing: r,
-		stellarSeed: stellarSeed,
 		protocolBitswap:       s.ProtocolPrefix + ProtocolBitswap,
 		protocolBitswapOne:    s.ProtocolPrefix + ProtocolBitswapOne,
 		protocolBitswapNoVers: s.ProtocolPrefix + ProtocolBitswapNoVers,
@@ -54,8 +53,6 @@ type impl struct {
 	protocolBitswap       protocol.ID
 	protocolBitswapOne    protocol.ID
 	protocolBitswapNoVers protocol.ID
-
-	stellarSeed		string
 
 	// inbound messages from the network are forwarded to the receiver
 	receiver Receiver
@@ -225,14 +222,6 @@ func (bsnet *impl) Stats() Stats {
 		MessagesRecvd: atomic.LoadUint64(&bsnet.stats.MessagesRecvd),
 		MessagesSent:  atomic.LoadUint64(&bsnet.stats.MessagesSent),
 	}
-}
-
-func (bsnet *impl) GetFromPeerStore(p peer.ID, key string) (interface{}, error) {
-	return bsnet.host.Peerstore().Get(p, key)
-}
-
-func (bsnet *impl) GetStellarSeed() string {
-	return bsnet.stellarSeed
 }
 
 type netNotifiee impl

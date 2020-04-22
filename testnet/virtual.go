@@ -8,8 +8,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/stellar/go/keypair"
-
 	bsmsg "github.com/ipfs/go-bitswap/message"
 	bsnet "github.com/ipfs/go-bitswap/network"
 
@@ -178,19 +176,6 @@ type networkClient struct {
 	network *network
 	routing routing.Routing
 	stats   bsnet.Stats
-}
-
-
-func (n *networkClient) GetFromPeerStore(p peer.ID, key string) (interface{}, error) {
-	k, _ := keypair.Random()
-
-	return k.Address(), nil
-}
-
-func (n *networkClient) GetStellarSeed() string {
-	key, _ := keypair.Random()
-
-	return key.Seed()
 }
 
 func (nc *networkClient) SendMessage(

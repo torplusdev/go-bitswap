@@ -4,7 +4,6 @@
 package bitswap_message_pb
 
 import (
-	encoding_binary "encoding/binary"
 	fmt "fmt"
 	_ "github.com/gogo/protobuf/gogoproto"
 	proto "github.com/gogo/protobuf/proto"
@@ -25,11 +24,16 @@ var _ = math.Inf
 const _ = proto.GoGoProtoPackageIsVersion3 // please upgrade the proto package
 
 type Message struct {
-	Wantlist               Message_Wantlist `protobuf:"bytes,1,opt,name=wantlist,proto3" json:"wantlist"`
-	Blocks                 [][]byte         `protobuf:"bytes,2,rep,name=blocks,proto3" json:"blocks,omitempty"`
-	Payload                []Message_Block  `protobuf:"bytes,3,rep,name=payload,proto3" json:"payload"`
-	RequestedPaymentAmount float64          `protobuf:"fixed64,4,opt,name=requestedPaymentAmount,proto3" json:"requestedPaymentAmount,omitempty"`
-	PaymentProve           string           `protobuf:"bytes,5,opt,name=paymentProve,proto3" json:"paymentProve,omitempty"`
+	Wantlist Message_Wantlist `protobuf:"bytes,1,opt,name=wantlist,proto3" json:"wantlist"`
+	Blocks   [][]byte         `protobuf:"bytes,2,rep,name=blocks,proto3" json:"blocks,omitempty"`
+	Payload  []Message_Block  `protobuf:"bytes,3,rep,name=payload,proto3" json:"payload"`
+	// Bitswap+ addon
+	//
+	// Types that are valid to be assigned to PaymentMessage:
+	//	*Message_InitiatePayment_
+	//	*Message_PaymentCommand_
+	//	*Message_PaymentResponse_
+	PaymentMessage isMessage_PaymentMessage `protobuf_oneof:"PaymentMessage"`
 }
 
 func (m *Message) Reset()         { *m = Message{} }
@@ -65,6 +69,33 @@ func (m *Message) XXX_DiscardUnknown() {
 
 var xxx_messageInfo_Message proto.InternalMessageInfo
 
+type isMessage_PaymentMessage interface {
+	isMessage_PaymentMessage()
+	MarshalTo([]byte) (int, error)
+	Size() int
+}
+
+type Message_InitiatePayment_ struct {
+	InitiatePayment *Message_InitiatePayment `protobuf:"bytes,4,opt,name=initiatePayment,proto3,oneof" json:"initiatePayment,omitempty"`
+}
+type Message_PaymentCommand_ struct {
+	PaymentCommand *Message_PaymentCommand `protobuf:"bytes,5,opt,name=paymentCommand,proto3,oneof" json:"paymentCommand,omitempty"`
+}
+type Message_PaymentResponse_ struct {
+	PaymentResponse *Message_PaymentResponse `protobuf:"bytes,6,opt,name=paymentResponse,proto3,oneof" json:"paymentResponse,omitempty"`
+}
+
+func (*Message_InitiatePayment_) isMessage_PaymentMessage() {}
+func (*Message_PaymentCommand_) isMessage_PaymentMessage()  {}
+func (*Message_PaymentResponse_) isMessage_PaymentMessage() {}
+
+func (m *Message) GetPaymentMessage() isMessage_PaymentMessage {
+	if m != nil {
+		return m.PaymentMessage
+	}
+	return nil
+}
+
 func (m *Message) GetWantlist() Message_Wantlist {
 	if m != nil {
 		return m.Wantlist
@@ -86,18 +117,34 @@ func (m *Message) GetPayload() []Message_Block {
 	return nil
 }
 
-func (m *Message) GetRequestedPaymentAmount() float64 {
-	if m != nil {
-		return m.RequestedPaymentAmount
+func (m *Message) GetInitiatePayment() *Message_InitiatePayment {
+	if x, ok := m.GetPaymentMessage().(*Message_InitiatePayment_); ok {
+		return x.InitiatePayment
 	}
-	return 0
+	return nil
 }
 
-func (m *Message) GetPaymentProve() string {
-	if m != nil {
-		return m.PaymentProve
+func (m *Message) GetPaymentCommand() *Message_PaymentCommand {
+	if x, ok := m.GetPaymentMessage().(*Message_PaymentCommand_); ok {
+		return x.PaymentCommand
 	}
-	return ""
+	return nil
+}
+
+func (m *Message) GetPaymentResponse() *Message_PaymentResponse {
+	if x, ok := m.GetPaymentMessage().(*Message_PaymentResponse_); ok {
+		return x.PaymentResponse
+	}
+	return nil
+}
+
+// XXX_OneofWrappers is for the internal use of the proto package.
+func (*Message) XXX_OneofWrappers() []interface{} {
+	return []interface{}{
+		(*Message_InitiatePayment_)(nil),
+		(*Message_PaymentCommand_)(nil),
+		(*Message_PaymentResponse_)(nil),
+	}
 }
 
 type Message_Wantlist struct {
@@ -264,42 +311,208 @@ func (m *Message_Block) GetData() []byte {
 	return nil
 }
 
+type Message_InitiatePayment struct {
+	PaymentRequest string `protobuf:"bytes,1,opt,name=paymentRequest,proto3" json:"paymentRequest,omitempty"`
+}
+
+func (m *Message_InitiatePayment) Reset()         { *m = Message_InitiatePayment{} }
+func (m *Message_InitiatePayment) String() string { return proto.CompactTextString(m) }
+func (*Message_InitiatePayment) ProtoMessage()    {}
+func (*Message_InitiatePayment) Descriptor() ([]byte, []int) {
+	return fileDescriptor_33c57e4bae7b9afd, []int{0, 2}
+}
+func (m *Message_InitiatePayment) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *Message_InitiatePayment) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	if deterministic {
+		return xxx_messageInfo_Message_InitiatePayment.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalToSizedBuffer(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
+}
+func (m *Message_InitiatePayment) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_Message_InitiatePayment.Merge(m, src)
+}
+func (m *Message_InitiatePayment) XXX_Size() int {
+	return m.Size()
+}
+func (m *Message_InitiatePayment) XXX_DiscardUnknown() {
+	xxx_messageInfo_Message_InitiatePayment.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_Message_InitiatePayment proto.InternalMessageInfo
+
+func (m *Message_InitiatePayment) GetPaymentRequest() string {
+	if m != nil {
+		return m.PaymentRequest
+	}
+	return ""
+}
+
+type Message_PaymentCommand struct {
+	CommandId   string `protobuf:"bytes,1,opt,name=commandId,proto3" json:"commandId,omitempty"`
+	CommandBody string `protobuf:"bytes,2,opt,name=commandBody,proto3" json:"commandBody,omitempty"`
+	CommandType int32  `protobuf:"varint,3,opt,name=commandType,proto3" json:"commandType,omitempty"`
+}
+
+func (m *Message_PaymentCommand) Reset()         { *m = Message_PaymentCommand{} }
+func (m *Message_PaymentCommand) String() string { return proto.CompactTextString(m) }
+func (*Message_PaymentCommand) ProtoMessage()    {}
+func (*Message_PaymentCommand) Descriptor() ([]byte, []int) {
+	return fileDescriptor_33c57e4bae7b9afd, []int{0, 3}
+}
+func (m *Message_PaymentCommand) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *Message_PaymentCommand) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	if deterministic {
+		return xxx_messageInfo_Message_PaymentCommand.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalToSizedBuffer(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
+}
+func (m *Message_PaymentCommand) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_Message_PaymentCommand.Merge(m, src)
+}
+func (m *Message_PaymentCommand) XXX_Size() int {
+	return m.Size()
+}
+func (m *Message_PaymentCommand) XXX_DiscardUnknown() {
+	xxx_messageInfo_Message_PaymentCommand.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_Message_PaymentCommand proto.InternalMessageInfo
+
+func (m *Message_PaymentCommand) GetCommandId() string {
+	if m != nil {
+		return m.CommandId
+	}
+	return ""
+}
+
+func (m *Message_PaymentCommand) GetCommandBody() string {
+	if m != nil {
+		return m.CommandBody
+	}
+	return ""
+}
+
+func (m *Message_PaymentCommand) GetCommandType() int32 {
+	if m != nil {
+		return m.CommandType
+	}
+	return 0
+}
+
+type Message_PaymentResponse struct {
+	CommandId    string `protobuf:"bytes,1,opt,name=commandId,proto3" json:"commandId,omitempty"`
+	CommandReply string `protobuf:"bytes,2,opt,name=commandReply,proto3" json:"commandReply,omitempty"`
+}
+
+func (m *Message_PaymentResponse) Reset()         { *m = Message_PaymentResponse{} }
+func (m *Message_PaymentResponse) String() string { return proto.CompactTextString(m) }
+func (*Message_PaymentResponse) ProtoMessage()    {}
+func (*Message_PaymentResponse) Descriptor() ([]byte, []int) {
+	return fileDescriptor_33c57e4bae7b9afd, []int{0, 4}
+}
+func (m *Message_PaymentResponse) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *Message_PaymentResponse) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	if deterministic {
+		return xxx_messageInfo_Message_PaymentResponse.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalToSizedBuffer(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
+}
+func (m *Message_PaymentResponse) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_Message_PaymentResponse.Merge(m, src)
+}
+func (m *Message_PaymentResponse) XXX_Size() int {
+	return m.Size()
+}
+func (m *Message_PaymentResponse) XXX_DiscardUnknown() {
+	xxx_messageInfo_Message_PaymentResponse.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_Message_PaymentResponse proto.InternalMessageInfo
+
+func (m *Message_PaymentResponse) GetCommandId() string {
+	if m != nil {
+		return m.CommandId
+	}
+	return ""
+}
+
+func (m *Message_PaymentResponse) GetCommandReply() string {
+	if m != nil {
+		return m.CommandReply
+	}
+	return ""
+}
+
 func init() {
 	proto.RegisterType((*Message)(nil), "bitswap.message.pb.Message")
 	proto.RegisterType((*Message_Wantlist)(nil), "bitswap.message.pb.Message.Wantlist")
 	proto.RegisterType((*Message_Wantlist_Entry)(nil), "bitswap.message.pb.Message.Wantlist.Entry")
 	proto.RegisterType((*Message_Block)(nil), "bitswap.message.pb.Message.Block")
+	proto.RegisterType((*Message_InitiatePayment)(nil), "bitswap.message.pb.Message.InitiatePayment")
+	proto.RegisterType((*Message_PaymentCommand)(nil), "bitswap.message.pb.Message.PaymentCommand")
+	proto.RegisterType((*Message_PaymentResponse)(nil), "bitswap.message.pb.Message.PaymentResponse")
 }
 
 func init() { proto.RegisterFile("message.proto", fileDescriptor_33c57e4bae7b9afd) }
 
 var fileDescriptor_33c57e4bae7b9afd = []byte{
-	// 385 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x8c, 0x92, 0x31, 0x6b, 0xdb, 0x40,
-	0x1c, 0xc5, 0x75, 0x96, 0x65, 0xab, 0x67, 0x75, 0x39, 0x8a, 0x39, 0x34, 0xa8, 0xaa, 0xe9, 0x20,
-	0x0a, 0x95, 0xc1, 0x86, 0xee, 0x36, 0xb4, 0x43, 0xa1, 0xe0, 0xde, 0xd2, 0xf9, 0x24, 0x9f, 0x55,
-	0x11, 0x49, 0xa7, 0x9c, 0x4e, 0x71, 0xf4, 0x2d, 0xf2, 0x85, 0xb2, 0x7b, 0xf4, 0x98, 0x29, 0x04,
-	0xfb, 0x73, 0x04, 0x82, 0x4e, 0x67, 0x43, 0x08, 0x09, 0xd9, 0xfe, 0xef, 0xaf, 0xf7, 0x7e, 0xfa,
-	0xeb, 0x21, 0xf8, 0x31, 0x67, 0x55, 0x45, 0x13, 0x16, 0x96, 0x82, 0x4b, 0x8e, 0x50, 0x94, 0xca,
-	0x6a, 0x4b, 0xcb, 0xf0, 0xbc, 0x8e, 0xdc, 0xef, 0x49, 0x2a, 0xff, 0xd7, 0x51, 0x18, 0xf3, 0x7c,
-	0x9a, 0xf0, 0x84, 0x4f, 0x95, 0x35, 0xaa, 0x37, 0x4a, 0x29, 0xa1, 0xa6, 0x0e, 0x31, 0x79, 0x34,
-	0xe1, 0xf0, 0x4f, 0x97, 0x46, 0xbf, 0xa0, 0xbd, 0xa5, 0x85, 0xcc, 0xd2, 0x4a, 0x62, 0xe0, 0x83,
-	0x60, 0x34, 0xfb, 0x1a, 0xbe, 0x7c, 0x43, 0xa8, 0xed, 0xe1, 0x3f, 0xed, 0x5d, 0xf6, 0x77, 0xf7,
-	0x9f, 0x0d, 0x72, 0xce, 0xa2, 0x31, 0x1c, 0x44, 0x19, 0x8f, 0x2f, 0x2a, 0xdc, 0xf3, 0xcd, 0xc0,
-	0x21, 0x5a, 0xa1, 0x05, 0x1c, 0x96, 0xb4, 0xc9, 0x38, 0x5d, 0x63, 0xd3, 0x37, 0x83, 0xd1, 0xec,
-	0xcb, 0x5b, 0xf8, 0x65, 0x1b, 0xd2, 0xec, 0x53, 0x0e, 0xfd, 0x80, 0x63, 0xc1, 0x2e, 0x6b, 0x56,
-	0x49, 0xb6, 0x5e, 0xd1, 0x26, 0x67, 0x85, 0x5c, 0xe4, 0xbc, 0x2e, 0x24, 0xee, 0xfb, 0x20, 0x00,
-	0xe4, 0x95, 0xa7, 0x68, 0x02, 0x9d, 0xb2, 0x5b, 0xac, 0x04, 0xbf, 0x62, 0xd8, 0xf2, 0x41, 0xf0,
-	0x81, 0x3c, 0xdb, 0xb9, 0xb7, 0x00, 0xda, 0xa7, 0x6f, 0x42, 0xbf, 0xe1, 0x90, 0x15, 0x52, 0xa4,
-	0xac, 0xc2, 0x40, 0xdd, 0xfa, 0xed, 0x3d, 0x55, 0x84, 0x3f, 0x0b, 0x29, 0x9a, 0xd3, 0xd1, 0x1a,
-	0x80, 0x10, 0xec, 0x6f, 0xea, 0x2c, 0xc3, 0x3d, 0x1f, 0x04, 0x36, 0x51, 0xb3, 0xfb, 0x17, 0x5a,
-	0xca, 0x8b, 0x3e, 0x41, 0x4b, 0xd5, 0xa3, 0x1a, 0x77, 0x48, 0x27, 0x90, 0x0b, 0xed, 0x52, 0xa4,
-	0x5c, 0xa4, 0xb2, 0x51, 0x31, 0x8b, 0x9c, 0x75, 0x5b, 0x6f, 0x4c, 0x8b, 0x98, 0x65, 0xd8, 0x54,
-	0x40, 0xad, 0xdc, 0x39, 0xb4, 0x54, 0x67, 0xad, 0xa1, 0x14, 0x6c, 0x93, 0x5e, 0x6b, 0xa6, 0x56,
-	0xed, 0x1d, 0x6b, 0x2a, 0xa9, 0x02, 0x3a, 0x44, 0xcd, 0x4b, 0xbc, 0x3b, 0x78, 0x60, 0x7f, 0xf0,
-	0xc0, 0xc3, 0xc1, 0x03, 0x37, 0x47, 0xcf, 0xd8, 0x1f, 0x3d, 0xe3, 0xee, 0xe8, 0x19, 0xd1, 0x40,
-	0xfd, 0x20, 0xf3, 0xa7, 0x00, 0x00, 0x00, 0xff, 0xff, 0x42, 0x8d, 0x97, 0x91, 0x74, 0x02, 0x00,
-	0x00,
+	// 500 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x8c, 0x53, 0x5d, 0x8b, 0xd3, 0x40,
+	0x14, 0x4d, 0xb6, 0x4d, 0x3f, 0x6e, 0xeb, 0x56, 0x06, 0x91, 0x21, 0x48, 0xac, 0x8b, 0x48, 0x59,
+	0x31, 0x0b, 0xbb, 0x4f, 0x3e, 0x1a, 0x51, 0x76, 0x05, 0xa1, 0x8e, 0x0b, 0xfb, 0x3c, 0x49, 0xa6,
+	0x75, 0x30, 0xc9, 0xc4, 0x64, 0xca, 0x9a, 0x7f, 0xe1, 0x1f, 0x12, 0x5f, 0xf7, 0x71, 0x1f, 0x7d,
+	0x12, 0x69, 0xff, 0x88, 0x64, 0x32, 0x8d, 0x4d, 0x84, 0xae, 0x6f, 0xf7, 0x1c, 0xee, 0x39, 0x73,
+	0x67, 0xce, 0x1d, 0xb8, 0x17, 0xb3, 0x3c, 0xa7, 0x4b, 0xe6, 0xa6, 0x99, 0x90, 0x02, 0x21, 0x9f,
+	0xcb, 0xfc, 0x9a, 0xa6, 0x6e, 0x4d, 0xfb, 0xf6, 0x8b, 0x25, 0x97, 0x9f, 0x56, 0xbe, 0x1b, 0x88,
+	0xf8, 0x64, 0x29, 0x96, 0xe2, 0x44, 0xb5, 0xfa, 0xab, 0x85, 0x42, 0x0a, 0xa8, 0xaa, 0xb2, 0x38,
+	0xfa, 0xd1, 0x87, 0xfe, 0xfb, 0x4a, 0x8d, 0xde, 0xc2, 0xe0, 0x9a, 0x26, 0x32, 0xe2, 0xb9, 0xc4,
+	0xe6, 0xd4, 0x9c, 0x8d, 0x4e, 0x9f, 0xba, 0xff, 0x9e, 0xe0, 0xea, 0x76, 0xf7, 0x4a, 0xf7, 0x7a,
+	0xdd, 0x9b, 0x5f, 0x8f, 0x0d, 0x52, 0x6b, 0xd1, 0x43, 0xe8, 0xf9, 0x91, 0x08, 0x3e, 0xe7, 0xf8,
+	0x60, 0xda, 0x99, 0x8d, 0x89, 0x46, 0xe8, 0x15, 0xf4, 0x53, 0x5a, 0x44, 0x82, 0x86, 0xb8, 0x33,
+	0xed, 0xcc, 0x46, 0xa7, 0x4f, 0xf6, 0xd9, 0x7b, 0xa5, 0x48, 0x7b, 0x6f, 0x75, 0xe8, 0x0a, 0x26,
+	0x3c, 0xe1, 0x92, 0x53, 0xc9, 0xe6, 0xb4, 0x88, 0x59, 0x22, 0x71, 0x57, 0x4d, 0xfa, 0x7c, 0x9f,
+	0xd5, 0x45, 0x53, 0x72, 0x6e, 0x90, 0xb6, 0x0b, 0xba, 0x84, 0xc3, 0xb4, 0x2a, 0x5f, 0x8b, 0x38,
+	0xa6, 0x49, 0x88, 0x2d, 0xe5, 0x7b, 0xbc, 0xcf, 0x77, 0xde, 0x50, 0x9c, 0x1b, 0xa4, 0xe5, 0x51,
+	0x8e, 0xab, 0x19, 0xc2, 0xf2, 0x54, 0x24, 0x39, 0xc3, 0xbd, 0xbb, 0xc7, 0x9d, 0x37, 0x25, 0xe5,
+	0xb8, 0x2d, 0x17, 0xfb, 0xbb, 0x09, 0x83, 0xed, 0xfb, 0xa3, 0x77, 0xd0, 0x67, 0x89, 0xcc, 0x38,
+	0xcb, 0xb1, 0xa9, 0xde, 0xf5, 0xf8, 0x7f, 0x62, 0x73, 0xdf, 0x24, 0x32, 0x2b, 0xb6, 0x0f, 0xac,
+	0x0d, 0x10, 0x82, 0xee, 0x62, 0x15, 0x45, 0xf8, 0x60, 0x6a, 0xce, 0x06, 0x44, 0xd5, 0xf6, 0x07,
+	0xb0, 0x54, 0x2f, 0x7a, 0x00, 0x96, 0x8a, 0x52, 0x6d, 0xc7, 0x98, 0x54, 0x00, 0xd9, 0x30, 0x48,
+	0x33, 0x2e, 0x32, 0x2e, 0x0b, 0x25, 0xb3, 0x48, 0x8d, 0xcb, 0x55, 0x08, 0x68, 0x12, 0xb0, 0x08,
+	0x77, 0x94, 0xa1, 0x46, 0xf6, 0x19, 0x58, 0x2a, 0xdf, 0xb2, 0x21, 0xcd, 0xd8, 0x82, 0x7f, 0xd5,
+	0x9e, 0x1a, 0x95, 0x73, 0x84, 0x54, 0x52, 0x65, 0x38, 0x26, 0xaa, 0xb6, 0x5f, 0xc2, 0xa4, 0x95,
+	0x24, 0x7a, 0x56, 0xc7, 0x46, 0xd8, 0x97, 0x15, 0xd3, 0x8b, 0x3b, 0x24, 0x2d, 0xd6, 0xce, 0xe0,
+	0xb0, 0x19, 0x16, 0x7a, 0x04, 0xc3, 0xa0, 0x2a, 0x2f, 0x42, 0x2d, 0xfa, 0x4b, 0xa0, 0x29, 0x8c,
+	0x34, 0xf0, 0x44, 0x58, 0x5d, 0x6b, 0x48, 0x76, 0xa9, 0x9d, 0x8e, 0xcb, 0x22, 0x65, 0xea, 0x7a,
+	0x16, 0xd9, 0xa5, 0xec, 0x8f, 0x30, 0x69, 0x25, 0x79, 0xc7, 0xa1, 0x47, 0x30, 0xd6, 0x80, 0xb0,
+	0x34, 0xda, 0x9e, 0xda, 0xe0, 0xbc, 0xfb, 0xf5, 0x45, 0x74, 0x9e, 0x1e, 0xbe, 0x59, 0x3b, 0xe6,
+	0xed, 0xda, 0x31, 0x7f, 0xaf, 0x1d, 0xf3, 0xdb, 0xc6, 0x31, 0x6e, 0x37, 0x8e, 0xf1, 0x73, 0xe3,
+	0x18, 0x7e, 0x4f, 0x7d, 0xf1, 0xb3, 0x3f, 0x01, 0x00, 0x00, 0xff, 0xff, 0xa7, 0x72, 0x4e, 0x16,
+	0x36, 0x04, 0x00, 0x00,
 }
 
 func (m *Message) Marshal() (dAtA []byte, err error) {
@@ -322,18 +535,14 @@ func (m *Message) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	_ = i
 	var l int
 	_ = l
-	if len(m.PaymentProve) > 0 {
-		i -= len(m.PaymentProve)
-		copy(dAtA[i:], m.PaymentProve)
-		i = encodeVarintMessage(dAtA, i, uint64(len(m.PaymentProve)))
-		i--
-		dAtA[i] = 0x2a
-	}
-	if m.RequestedPaymentAmount != 0 {
-		i -= 8
-		encoding_binary.LittleEndian.PutUint64(dAtA[i:], uint64(math.Float64bits(float64(m.RequestedPaymentAmount))))
-		i--
-		dAtA[i] = 0x21
+	if m.PaymentMessage != nil {
+		{
+			size := m.PaymentMessage.Size()
+			i -= size
+			if _, err := m.PaymentMessage.MarshalTo(dAtA[i:]); err != nil {
+				return 0, err
+			}
+		}
 	}
 	if len(m.Payload) > 0 {
 		for iNdEx := len(m.Payload) - 1; iNdEx >= 0; iNdEx-- {
@@ -371,6 +580,69 @@ func (m *Message) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	return len(dAtA) - i, nil
 }
 
+func (m *Message_InitiatePayment_) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *Message_InitiatePayment_) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	if m.InitiatePayment != nil {
+		{
+			size, err := m.InitiatePayment.MarshalToSizedBuffer(dAtA[:i])
+			if err != nil {
+				return 0, err
+			}
+			i -= size
+			i = encodeVarintMessage(dAtA, i, uint64(size))
+		}
+		i--
+		dAtA[i] = 0x22
+	}
+	return len(dAtA) - i, nil
+}
+func (m *Message_PaymentCommand_) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *Message_PaymentCommand_) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	if m.PaymentCommand != nil {
+		{
+			size, err := m.PaymentCommand.MarshalToSizedBuffer(dAtA[:i])
+			if err != nil {
+				return 0, err
+			}
+			i -= size
+			i = encodeVarintMessage(dAtA, i, uint64(size))
+		}
+		i--
+		dAtA[i] = 0x2a
+	}
+	return len(dAtA) - i, nil
+}
+func (m *Message_PaymentResponse_) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *Message_PaymentResponse_) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	if m.PaymentResponse != nil {
+		{
+			size, err := m.PaymentResponse.MarshalToSizedBuffer(dAtA[:i])
+			if err != nil {
+				return 0, err
+			}
+			i -= size
+			i = encodeVarintMessage(dAtA, i, uint64(size))
+		}
+		i--
+		dAtA[i] = 0x32
+	}
+	return len(dAtA) - i, nil
+}
 func (m *Message_Wantlist) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
@@ -500,6 +772,115 @@ func (m *Message_Block) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	return len(dAtA) - i, nil
 }
 
+func (m *Message_InitiatePayment) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *Message_InitiatePayment) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *Message_InitiatePayment) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	if len(m.PaymentRequest) > 0 {
+		i -= len(m.PaymentRequest)
+		copy(dAtA[i:], m.PaymentRequest)
+		i = encodeVarintMessage(dAtA, i, uint64(len(m.PaymentRequest)))
+		i--
+		dAtA[i] = 0xa
+	}
+	return len(dAtA) - i, nil
+}
+
+func (m *Message_PaymentCommand) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *Message_PaymentCommand) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *Message_PaymentCommand) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	if m.CommandType != 0 {
+		i = encodeVarintMessage(dAtA, i, uint64(m.CommandType))
+		i--
+		dAtA[i] = 0x18
+	}
+	if len(m.CommandBody) > 0 {
+		i -= len(m.CommandBody)
+		copy(dAtA[i:], m.CommandBody)
+		i = encodeVarintMessage(dAtA, i, uint64(len(m.CommandBody)))
+		i--
+		dAtA[i] = 0x12
+	}
+	if len(m.CommandId) > 0 {
+		i -= len(m.CommandId)
+		copy(dAtA[i:], m.CommandId)
+		i = encodeVarintMessage(dAtA, i, uint64(len(m.CommandId)))
+		i--
+		dAtA[i] = 0xa
+	}
+	return len(dAtA) - i, nil
+}
+
+func (m *Message_PaymentResponse) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *Message_PaymentResponse) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *Message_PaymentResponse) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	if len(m.CommandReply) > 0 {
+		i -= len(m.CommandReply)
+		copy(dAtA[i:], m.CommandReply)
+		i = encodeVarintMessage(dAtA, i, uint64(len(m.CommandReply)))
+		i--
+		dAtA[i] = 0x12
+	}
+	if len(m.CommandId) > 0 {
+		i -= len(m.CommandId)
+		copy(dAtA[i:], m.CommandId)
+		i = encodeVarintMessage(dAtA, i, uint64(len(m.CommandId)))
+		i--
+		dAtA[i] = 0xa
+	}
+	return len(dAtA) - i, nil
+}
+
 func encodeVarintMessage(dAtA []byte, offset int, v uint64) int {
 	offset -= sovMessage(v)
 	base := offset
@@ -531,16 +912,48 @@ func (m *Message) Size() (n int) {
 			n += 1 + l + sovMessage(uint64(l))
 		}
 	}
-	if m.RequestedPaymentAmount != 0 {
-		n += 9
-	}
-	l = len(m.PaymentProve)
-	if l > 0 {
-		n += 1 + l + sovMessage(uint64(l))
+	if m.PaymentMessage != nil {
+		n += m.PaymentMessage.Size()
 	}
 	return n
 }
 
+func (m *Message_InitiatePayment_) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	if m.InitiatePayment != nil {
+		l = m.InitiatePayment.Size()
+		n += 1 + l + sovMessage(uint64(l))
+	}
+	return n
+}
+func (m *Message_PaymentCommand_) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	if m.PaymentCommand != nil {
+		l = m.PaymentCommand.Size()
+		n += 1 + l + sovMessage(uint64(l))
+	}
+	return n
+}
+func (m *Message_PaymentResponse_) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	if m.PaymentResponse != nil {
+		l = m.PaymentResponse.Size()
+		n += 1 + l + sovMessage(uint64(l))
+	}
+	return n
+}
 func (m *Message_Wantlist) Size() (n int) {
 	if m == nil {
 		return 0
@@ -589,6 +1002,56 @@ func (m *Message_Block) Size() (n int) {
 		n += 1 + l + sovMessage(uint64(l))
 	}
 	l = len(m.Data)
+	if l > 0 {
+		n += 1 + l + sovMessage(uint64(l))
+	}
+	return n
+}
+
+func (m *Message_InitiatePayment) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	l = len(m.PaymentRequest)
+	if l > 0 {
+		n += 1 + l + sovMessage(uint64(l))
+	}
+	return n
+}
+
+func (m *Message_PaymentCommand) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	l = len(m.CommandId)
+	if l > 0 {
+		n += 1 + l + sovMessage(uint64(l))
+	}
+	l = len(m.CommandBody)
+	if l > 0 {
+		n += 1 + l + sovMessage(uint64(l))
+	}
+	if m.CommandType != 0 {
+		n += 1 + sovMessage(uint64(m.CommandType))
+	}
+	return n
+}
+
+func (m *Message_PaymentResponse) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	l = len(m.CommandId)
+	if l > 0 {
+		n += 1 + l + sovMessage(uint64(l))
+	}
+	l = len(m.CommandReply)
 	if l > 0 {
 		n += 1 + l + sovMessage(uint64(l))
 	}
@@ -730,21 +1193,10 @@ func (m *Message) Unmarshal(dAtA []byte) error {
 			}
 			iNdEx = postIndex
 		case 4:
-			if wireType != 1 {
-				return fmt.Errorf("proto: wrong wireType = %d for field RequestedPaymentAmount", wireType)
-			}
-			var v uint64
-			if (iNdEx + 8) > l {
-				return io.ErrUnexpectedEOF
-			}
-			v = uint64(encoding_binary.LittleEndian.Uint64(dAtA[iNdEx:]))
-			iNdEx += 8
-			m.RequestedPaymentAmount = float64(math.Float64frombits(v))
-		case 5:
 			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field PaymentProve", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field InitiatePayment", wireType)
 			}
-			var stringLen uint64
+			var msglen int
 			for shift := uint(0); ; shift += 7 {
 				if shift >= 64 {
 					return ErrIntOverflowMessage
@@ -754,23 +1206,96 @@ func (m *Message) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				stringLen |= uint64(b&0x7F) << shift
+				msglen |= int(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
 			}
-			intStringLen := int(stringLen)
-			if intStringLen < 0 {
+			if msglen < 0 {
 				return ErrInvalidLengthMessage
 			}
-			postIndex := iNdEx + intStringLen
+			postIndex := iNdEx + msglen
 			if postIndex < 0 {
 				return ErrInvalidLengthMessage
 			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.PaymentProve = string(dAtA[iNdEx:postIndex])
+			v := &Message_InitiatePayment{}
+			if err := v.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			m.PaymentMessage = &Message_InitiatePayment_{v}
+			iNdEx = postIndex
+		case 5:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field PaymentCommand", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowMessage
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthMessage
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthMessage
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			v := &Message_PaymentCommand{}
+			if err := v.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			m.PaymentMessage = &Message_PaymentCommand_{v}
+			iNdEx = postIndex
+		case 6:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field PaymentResponse", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowMessage
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthMessage
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthMessage
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			v := &Message_PaymentResponse{}
+			if err := v.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			m.PaymentMessage = &Message_PaymentResponse_{v}
 			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
@@ -1125,6 +1650,344 @@ func (m *Message_Block) Unmarshal(dAtA []byte) error {
 			if m.Data == nil {
 				m.Data = []byte{}
 			}
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipMessage(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthMessage
+			}
+			if (iNdEx + skippy) < 0 {
+				return ErrInvalidLengthMessage
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *Message_InitiatePayment) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowMessage
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: InitiatePayment: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: InitiatePayment: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field PaymentRequest", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowMessage
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthMessage
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthMessage
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.PaymentRequest = string(dAtA[iNdEx:postIndex])
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipMessage(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthMessage
+			}
+			if (iNdEx + skippy) < 0 {
+				return ErrInvalidLengthMessage
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *Message_PaymentCommand) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowMessage
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: PaymentCommand: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: PaymentCommand: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field CommandId", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowMessage
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthMessage
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthMessage
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.CommandId = string(dAtA[iNdEx:postIndex])
+			iNdEx = postIndex
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field CommandBody", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowMessage
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthMessage
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthMessage
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.CommandBody = string(dAtA[iNdEx:postIndex])
+			iNdEx = postIndex
+		case 3:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field CommandType", wireType)
+			}
+			m.CommandType = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowMessage
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.CommandType |= int32(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		default:
+			iNdEx = preIndex
+			skippy, err := skipMessage(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthMessage
+			}
+			if (iNdEx + skippy) < 0 {
+				return ErrInvalidLengthMessage
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *Message_PaymentResponse) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowMessage
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: PaymentResponse: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: PaymentResponse: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field CommandId", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowMessage
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthMessage
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthMessage
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.CommandId = string(dAtA[iNdEx:postIndex])
+			iNdEx = postIndex
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field CommandReply", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowMessage
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthMessage
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthMessage
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.CommandReply = string(dAtA[iNdEx:postIndex])
 			iNdEx = postIndex
 		default:
 			iNdEx = preIndex

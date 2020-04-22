@@ -4,6 +4,7 @@ require (
 	github.com/cskr/pubsub v1.0.2
 	github.com/gogo/protobuf v1.3.1
 	github.com/google/uuid v1.1.1
+	github.com/gorilla/mux v1.7.4
 	github.com/ipfs/go-bitswap v0.1.10
 	github.com/ipfs/go-block-format v0.0.2
 	github.com/ipfs/go-cid v0.0.3

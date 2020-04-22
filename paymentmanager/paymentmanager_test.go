@@ -1,168 +1,55 @@
 package paymentmanager
 
 import (
-	"container/list"
 	"github.com/libp2p/go-libp2p-core/peer"
-	"github.com/stellar/go/clients/horizonclient"
-	"github.com/stellar/go/keypair"
-	"github.com/stellar/go/network"
-	"github.com/stellar/go/txnbuild"
-	"strconv"
 	"testing"
 )
 
 type PaymentHandlerMock struct {
-	keyMap map[peer.ID]*keypair.Full
-	ownKey	*keypair.Full
-	stellarClient	*horizonclient.Client
 	debtRegistry	map[peer.ID]*Debt
+	requestedPaymentAmount	int
+	paymentRequest	string
 }
 
-func (p PaymentHandlerMock) getPeerStellarKey(id peer.ID) (string, error) {
-	return p.keyMap[id].Address(), nil
-}
-
-func (p PaymentHandlerMock) getDebt(id peer.ID) *Debt {
+func (p *PaymentHandlerMock) GetDebt(id peer.ID) *Debt {
 	return p.debtRegistry[id]
 }
 
-func (p PaymentHandlerMock) getOwnStellarKey() *keypair.Full {
-	return p.ownKey
+func (p *PaymentHandlerMock) CallProcessCommand(commandType int32, commandBody string) (string, error) {
+	panic("implement me")
 }
 
-func (p PaymentHandlerMock) getStellarClient() *horizonclient.Client {
-	return p.stellarClient
+func (p *PaymentHandlerMock) CallProcessPayment(paymentRequest string, requestReference string) {
+	panic("implement me")
+}
+
+func (p *PaymentHandlerMock) CreatePaymentInfo(amount int) (string, error) {
+	p.requestedPaymentAmount = amount
+
+	return p.paymentRequest, nil
+}
+
+func (p *PaymentHandlerMock) CallProcessResponse(commandId string, responseBody string, nodeId string) {
+	panic("implement me")
 }
 
 type PeerHandlerMock struct {
-	paymentMessages map[peer.ID]string
-	requireMessages map[peer.ID]float64
+	paymentRequests map[peer.ID]string
 }
 
-func (p PeerHandlerMock) SendPaymentMessage(target peer.ID, paymentHash string) {
-	p.paymentMessages[target] = paymentHash
+func (p *PeerHandlerMock) InitiatePayment(target peer.ID, paymentRequest string) {
+	p.paymentRequests[target] = paymentRequest
 }
 
-func (p PeerHandlerMock) RequirePaymentMessage(target peer.ID, amount float64) {
-	p.requireMessages[target] = amount
+func (p *PeerHandlerMock) PaymentCommand(target peer.ID, commandId string, commandBody string, commandType int32) {
+	panic("implement me")
 }
 
-func TestHandlePayment(t *testing.T) {
-	msg := processPayment{
-		target:    "targetId",
-		payAmount: 10,
-	}
-
-	peerKey, _ := keypair.Random()
-	ownKey, _ := keypair.Random()
-	client := horizonclient.DefaultTestNetClient
-
-	paymentMock := &PaymentHandlerMock{
-		keyMap: map[peer.ID]*keypair.Full{
-			"targetId": peerKey,
-		},
-		ownKey: ownKey,
-		stellarClient: client,
-		debtRegistry: map[peer.ID]*Debt{
-			"targetId": &Debt{
-				id:               "targetId",
-				validationQueue:  nil,
-				requestedAmount:  0,
-				transferredBytes: 0,
-				receivedBytes:    10 / megabytePrice * 1024 * 1024,
-			},
-		},
-	}
-
-	peerMock := &PeerHandlerMock{
-		paymentMessages: map[peer.ID]string{},
-	}
-
-	client.Fund(ownKey.Address())
-	client.Fund(peerKey.Address())
-
-	msg.handle(paymentMock, peerMock)
-
-	_, ok := peerMock.paymentMessages[msg.target]
-
-	if !ok  {
-		t.Errorf("No payment hash found")
-	}
-}
-
-func TestValidateTransactions(t *testing.T) {
-	peerKey, _ := keypair.Random()
-	ownKey, _ := keypair.Random()
-	client := horizonclient.DefaultTestNetClient
-
-	debt := Debt{
-		id:               "PeerId",
-		validationQueue:  list.New(),
-		requestedAmount:  10,
-	}
-
-	paymentMock := &PaymentHandlerMock{
-		keyMap: map[peer.ID]*keypair.Full{
-			"PeerId": peerKey,
-		},
-		ownKey: ownKey,
-		stellarClient: client,
-		debtRegistry: map[peer.ID]*Debt{
-			"PeerId": &debt,
-		},
-	}
-
-	client.Fund(ownKey.Address())
-	client.Fund(peerKey.Address())
-
-	// Account detail need to be fetch before every transaction to refresh sequence number
-	ar := horizonclient.AccountRequest{AccountID: peerKey.Address()}
-	sourceAccount, err := client.AccountDetail(ar)
-
-	if err != nil {
-		hError := err.(*horizonclient.Error)
-		log.Fatal("Peer stellar account not found", hError)
-		return
-	}
-
-	op := txnbuild.Payment{
-		Destination: ownKey.Address(),
-		Amount:      strconv.FormatFloat(10, 'f', -1, 64),
-		Asset:       txnbuild.NativeAsset{}, // TODO: use PiedPiper asset
-	}
-
-	// Construct the transaction that will carry the operation
-	tx := txnbuild.Transaction{
-		SourceAccount: &sourceAccount,
-		Operations:    []txnbuild.Operation{&op},
-		Timebounds:    txnbuild.NewTimeout(300),
-		Network:       network.TestNetworkPassphrase,
-	}
-
-	// Sign the transaction, serialise it to XDR, and base 64 encode it
-	txeBase64, err := tx.BuildSignEncode(peerKey)
-
-	// Submit the transaction
-	resp, err := client.SubmitTransactionXDR(txeBase64)
-
-	debt.validationQueue.PushBack(resp.Hash)
-
-	debt.validateTransactions(paymentMock)
-
-	if debt.requestedAmount > 0 {
-		t.Errorf("Amount not validated")
-	}
-
-	if debt.validationQueue.Len() > 0 {
-		t.Errorf("Validation queue not cleared")
-	}
+func (p *PeerHandlerMock) PaymentResponse(target peer.ID, commandId string, commandReply string) {
+	panic("implement me")
 }
 
 func TestRequirePayment(t *testing.T) {
-	peerKey, _ := keypair.Random()
-	ownKey, _ := keypair.Random()
-
-	client := horizonclient.DefaultTestNetClient
 
 	msg := requirePayment {
 		target: "TargetId",
@@ -178,26 +65,27 @@ func TestRequirePayment(t *testing.T) {
 	}
 
 	paymentMock := &PaymentHandlerMock{
-		keyMap: map[peer.ID]*keypair.Full{
-			"TargetId": peerKey,
-		},
-		ownKey: ownKey,
-		stellarClient: client,
 		debtRegistry: map[peer.ID]*Debt{
 			"TargetId": &debt,
 		},
+		requestedPaymentAmount: 0,
+		paymentRequest:         "sampleRequestInJson",
 	}
 
 	peerMock := &PeerHandlerMock{
-		requireMessages: map[peer.ID]float64{},
+		paymentRequests: map[peer.ID]string{},
 	}
 
 	msg.handle(paymentMock, peerMock)
 
-	expectedAmount := 50 * megabytePrice
+	expectedAmount := 50 * 1024 * 1024
 
-	if peerMock.requireMessages["TargetId"] != expectedAmount {
-		t.Errorf("Invalid price")
+	if paymentMock.requestedPaymentAmount != expectedAmount {
+		t.Errorf("Invalid amount")
+	}
+
+	if peerMock.paymentRequests["TargetId"] != "sampleRequestInJson" {
+		t.Errorf("Invalid request")
 	}
 
 	if debt.transferredBytes != 0 {

@@ -17,13 +17,13 @@ import (
 	bsmq "github.com/ipfs/go-bitswap/messagequeue"
 	bsnet "github.com/ipfs/go-bitswap/network"
 	notifications "github.com/ipfs/go-bitswap/notifications"
+	bspaym "github.com/ipfs/go-bitswap/paymentmanager"
 	bspm "github.com/ipfs/go-bitswap/peermanager"
 	bspqm "github.com/ipfs/go-bitswap/providerquerymanager"
 	bssession "github.com/ipfs/go-bitswap/session"
 	bssm "github.com/ipfs/go-bitswap/sessionmanager"
 	bsspm "github.com/ipfs/go-bitswap/sessionpeermanager"
 	bswm "github.com/ipfs/go-bitswap/wantmanager"
-	bspaym "github.com/ipfs/go-bitswap/paymentmanager"
 	blocks "github.com/ipfs/go-block-format"
 	cid "github.com/ipfs/go-cid"
 	blockstore "github.com/ipfs/go-ipfs-blockstore"
@@ -66,6 +66,13 @@ type Option func(*Bitswap)
 func ProvideEnabled(enabled bool) Option {
 	return func(bs *Bitswap) {
 		bs.provideEnabled = enabled
+	}
+}
+
+// Configures bitswap to use PPChannel
+func PPChannelConfig(commandListenPort int, channelUrl string) Option {
+	return func(bs *Bitswap) {
+		bs.paym.SetPPChannelSettings(commandListenPort, channelUrl)
 	}
 }
 
@@ -408,16 +415,22 @@ func (bs *Bitswap) ReceiveMessage(ctx context.Context, p peer.ID, incoming bsmsg
 
 	bs.paym.RegisterReceivedBytes(ctx, p, bytes)
 
-	requiredPayment := incoming.RequiredPayment()
+	initiatePayment := incoming.GetInitiatePayment()
 
-	if requiredPayment > 0 {
-		bs.paym.ProcessPayment(ctx, p, requiredPayment)
+	if initiatePayment != nil {
+		bs.paym.ProcessPaymentRequest(ctx, p, initiatePayment.GetPaymentRequest())
 	}
 
-	paymentHash := incoming.PaymentProve()
+	paymentCommand := incoming.GetPaymentCommand()
 
-	if paymentHash != "" {
-		bs.paym.ValidatePayment(ctx, p, paymentHash)
+	if paymentCommand != nil {
+		bs.paym.ProcessPaymentCommand(ctx, p, paymentCommand.GetCommandId(), paymentCommand.GetCommandBody(), paymentCommand.GetCommandType())
+	}
+
+	paymentResponse := incoming.GetPaymentResponse()
+
+	if paymentResponse != nil {
+		bs.paym.ProcessPaymentResponse(ctx, p, paymentResponse.GetCommandId(), paymentResponse.GetCommandReply())
 	}
 }
 
