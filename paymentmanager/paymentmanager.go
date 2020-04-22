@@ -441,11 +441,11 @@ func (pm *PaymentManager) CallProcessCommand(commandType int32, commandBody stri
 	return string(bodyBytes), nil
 }
 
-func (pm *PaymentManager) CallProcessPayment(paymentRequest string, requestReference string) {
+func (pm *PaymentManager) CallProcessPayment(paymentRequest string, nodeId string) {
 	values := map[string]string {
 		"CallbackUrl":      fmt.Sprintf("http://localhost:%d/api/command", pm.commandListenPort),
 		"PaymentRequest":   paymentRequest,
-		"RequestReference": requestReference,
+		"NodeId": 			nodeId,
 	}
 
 	jsonValue, err := json.Marshal(values)
