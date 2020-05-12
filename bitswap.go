@@ -396,24 +396,22 @@ func (bs *Bitswap) ReceiveMessage(ctx context.Context, p peer.ID, incoming bsmsg
 
 	iblocks := incoming.Blocks()
 
-	if len(iblocks) == 0 {
-		return
+	if len(iblocks) != 0 {
+		bytes := bs.updateReceiveCounters(iblocks)
+
+		for _, b := range iblocks {
+			log.Debugf("[recv] block; cid=%s, peer=%s", b.Cid(), p)
+		}
+
+		// Process blocks
+		err := bs.receiveBlocksFrom(ctx, p, iblocks)
+		if err != nil {
+			log.Warningf("ReceiveMessage recvBlockFrom error: %s", err)
+			return
+		}
+
+		bs.paym.RegisterReceivedBytes(ctx, p, bytes)
 	}
-
-	bytes := bs.updateReceiveCounters(iblocks)
-
-	for _, b := range iblocks {
-		log.Debugf("[recv] block; cid=%s, peer=%s", b.Cid(), p)
-	}
-
-	// Process blocks
-	err := bs.receiveBlocksFrom(ctx, p, iblocks)
-	if err != nil {
-		log.Warningf("ReceiveMessage recvBlockFrom error: %s", err)
-		return
-	}
-
-	bs.paym.RegisterReceivedBytes(ctx, p, bytes)
 
 	initiatePayment := incoming.GetInitiatePayment()
 

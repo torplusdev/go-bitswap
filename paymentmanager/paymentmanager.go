@@ -468,7 +468,7 @@ func (pm *PaymentManager) CallProcessPayment(paymentRequest string, nodeId strin
 }
 
 func (pm *PaymentManager) CreatePaymentInfo(amount int) (string, error) {
-	values := map[string]string{"ServiceType": "ipfs", "CommodityType": "data", "Amount": strconv.Itoa(amount)}
+	values := map[string]interface{}{"ServiceType": "ipfs", "CommodityType": "data", "Amount": amount}
 
 	jsonValue, err := json.Marshal(values)
 

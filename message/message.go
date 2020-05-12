@@ -197,7 +197,7 @@ func (m *impl) Full() bool {
 }
 
 func (m *impl) Empty() bool {
-	return len(m.blocks) == 0 && len(m.wantlist) == 0
+	return len(m.blocks) == 0 && len(m.wantlist) == 0 && m.initiatePayment == nil && m.paymentCommand == nil && m.paymentResponse == nil
 }
 
 func (m *impl) Wantlist() []Entry {

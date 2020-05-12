@@ -178,7 +178,6 @@ func (mq *MessageQueue) rebroadcastWantlist() {
 }
 
 func (mq *MessageQueue) initiatePayment(paymentRequest string) bool {
-	var work bool
 	mq.nextMessageLk.Lock()
 	defer mq.nextMessageLk.Unlock()
 	// if we have no message held allocate a new one
@@ -188,11 +187,10 @@ func (mq *MessageQueue) initiatePayment(paymentRequest string) bool {
 
 	mq.nextMessage.InitiatePayment(paymentRequest)
 
-	return work
+	return true
 }
 
 func (mq *MessageQueue) paymentCommand(commandId string, commandBody string, commandType int32) bool {
-	var work bool
 	mq.nextMessageLk.Lock()
 	defer mq.nextMessageLk.Unlock()
 	// if we have no message held allocate a new one
@@ -202,11 +200,10 @@ func (mq *MessageQueue) paymentCommand(commandId string, commandBody string, com
 
 	mq.nextMessage.PaymentCommand(commandId, commandBody, commandType)
 
-	return work
+	return true
 }
 
 func (mq *MessageQueue) paymentResponse(commandId string, commandReply string) bool {
-	var work bool
 	mq.nextMessageLk.Lock()
 	defer mq.nextMessageLk.Unlock()
 	// if we have no message held allocate a new one
@@ -216,7 +213,7 @@ func (mq *MessageQueue) paymentResponse(commandId string, commandReply string) b
 
 	mq.nextMessage.PaymentResponse(commandId, commandReply)
 
-	return work
+	return true
 }
 
 func (mq *MessageQueue) addEntries(entries []bsmsg.Entry, ses uint64) bool {
