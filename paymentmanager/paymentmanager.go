@@ -23,11 +23,17 @@ import (
 
 var log = logging.Logger("bitswap")
 
-type ProcessCommandRequest struct {
+type CommandModel struct {
 	CommandId	string
 	CommandType int32
 	CommandBody string
 	NodeId		string
+}
+
+type CommandResponseModel struct {
+	CommandResponse	interface{}
+	CommandId		string
+	NodeId			string
 }
 
 // PeerHandler sends changes out to the network as they get added to the payment list
@@ -41,7 +47,7 @@ type PeerHandler interface {
 
 type PaymentHandler interface {
 	GetDebt(id peer.ID) *Debt
-	CallProcessCommand(commandId string, commandType int32, commandBody string) (string, error)
+	CallProcessCommand(commandId string, commandType int32, commandBody string, nodeId string) error
 	CallProcessPayment(paymentRequest string, requestReference string)
 	CreatePaymentInfo(amount int) (string, error)
 	CallProcessResponse(commandId string, responseBody string, nodeId string)
@@ -130,6 +136,7 @@ func (pm *PaymentManager) startCommandServer() {
 	router := mux.NewRouter()
 
 	router.HandleFunc("/api/command", pm.ProcessCommand).Methods("POST")
+	router.HandleFunc("/api/commandResponse", pm.ProcessCommandResponse).Methods("POST")
 
 	pm.server = &http.Server{
 		Addr: fmt.Sprintf(":%d",pm.commandListenPort),
@@ -208,11 +215,11 @@ func (pm *PaymentManager) GetDebt(id peer.ID) *Debt {
 	return debt
 }
 
-func (pm *PaymentManager) ProcessCommand(w http.ResponseWriter, r *http.Request) {
-	// Extract command request from the request and forward it to peer
-	command := &ProcessCommandRequest{}
+func (pm *PaymentManager) ProcessCommandResponse(w http.ResponseWriter, r *http.Request) {
+	// Extract command response from the request and forward it to peer
+	request := &CommandResponseModel{}
 
-	err := json.NewDecoder(r.Body).Decode(command)
+	err := json.NewDecoder(r.Body).Decode(request)
 
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
@@ -221,7 +228,41 @@ func (pm *PaymentManager) ProcessCommand(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	targetId, err := peer.IDHexDecode(command.NodeId)
+	targetId, err := peer.IDHexDecode(request.NodeId)
+
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		io.WriteString(w, err.Error())
+
+		return
+	}
+
+	select {
+	case pm.paymentMessages <- &processIncomingPaymentCommandResponse{
+		target:      targetId,
+		commandId:   request.CommandId,
+		commandResponse: request.CommandResponse,
+	}:
+		w.WriteHeader(http.StatusOK)
+	case <-pm.ctx.Done():
+		w.WriteHeader(http.StatusRequestTimeout)
+	}
+}
+
+func (pm *PaymentManager) ProcessCommand(w http.ResponseWriter, r *http.Request) {
+	// Extract command request from the request and forward it to peer
+	request := &CommandModel{}
+
+	err := json.NewDecoder(r.Body).Decode(request)
+
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		io.WriteString(w, err.Error())
+
+		return
+	}
+
+	targetId, err := peer.IDHexDecode(request.NodeId)
 
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
@@ -233,9 +274,9 @@ func (pm *PaymentManager) ProcessCommand(w http.ResponseWriter, r *http.Request)
 	select {
 	case pm.paymentMessages <- &processIncomingPaymentCommand{
 		target:      targetId,
-		commandId:   command.CommandId,
-		commandType: command.CommandType,
-		commandBody: command.CommandBody,
+		commandId:   request.CommandId,
+		commandType: request.CommandType,
+		commandBody: request.CommandBody,
 	}:
 		w.WriteHeader(http.StatusOK)
 	case <-pm.ctx.Done():
@@ -336,6 +377,24 @@ func (r requirePayment) handle(handler PaymentHandler, peerHandler PeerHandler) 
 	}
 }
 
+type processIncomingPaymentCommandResponse struct {
+	target 			peer.ID
+	commandId		string
+	commandResponse interface{}
+}
+
+func (p processIncomingPaymentCommandResponse) handle(pm PaymentHandler, peerHandler PeerHandler) {
+	data, err := json.Marshal(p.commandResponse)
+
+	if err != nil {
+		log.Error("Command response marshal failed: %s", err.Error())
+
+		return
+	}
+
+	peerHandler.PaymentResponse(p.target, p.commandId, string(data))
+}
+
 type processIncomingPaymentCommand struct {
 	target 		peer.ID
 	commandId	string
@@ -365,15 +424,11 @@ type processOutgoingPaymentCommand struct {
 }
 
 func (p processOutgoingPaymentCommand) handle(pm PaymentHandler, peerHandler PeerHandler) {
-	response, err := pm.CallProcessCommand(p.commandId, p.commandType, p.commandBody)
+	err := pm.CallProcessCommand(p.commandId, p.commandType, p.commandBody, peer.IDHexEncode(p.from))
 
 	if err != nil {
 		log.Error("process command failed: %s", err.Error())
-
-		return
 	}
-
-	peerHandler.PaymentResponse(p.from, p.commandId, response)
 }
 
 func (pm *PaymentManager) CallProcessResponse(commandId string, responseBody string, nodeId string) {
@@ -403,11 +458,13 @@ func (pm *PaymentManager) CallProcessResponse(commandId string, responseBody str
 }
 
 
-func (pm *PaymentManager) CallProcessCommand(commandId string, commandType int32, commandBody string) (string, error) {
+func (pm *PaymentManager) CallProcessCommand(commandId string, commandType int32, commandBody string, nodeId string) error {
 	values := map[string]interface{} {
+		"NodeId":		nodeId,
 		"CommandId":	commandId,
 		"CommandType":	commandType,
 		"CommandBody":	commandBody,
+		"CallbackUrl":	fmt.Sprintf("http://localhost:%d/api/commandResponse", pm.commandListenPort),
 	}
 
 	jsonValue, err := json.Marshal(values)
@@ -415,7 +472,7 @@ func (pm *PaymentManager) CallProcessCommand(commandId string, commandType int32
 	if err != nil {
 		log.Error("failed to serialize process command request: %s", err.Error())
 
-		return "", err
+		return err
 	}
 
 	reply, err := http.Post(fmt.Sprintf("%s/api/utility/processCommand", pm.channelUrl), "application/json", bytes.NewBuffer(jsonValue))
@@ -423,22 +480,14 @@ func (pm *PaymentManager) CallProcessCommand(commandId string, commandType int32
 	if err != nil {
 		log.Error("failed to call process command: %s", err.Error())
 
-		return "", err
+		return err
 	}
 
 	defer reply.Body.Close()
 
 	log.Info("process command call status: %d", reply.StatusCode)
 
-	bodyBytes, err := ioutil.ReadAll(reply.Body)
-
-	if err != nil {
-		log.Error("failed to read process command response body: %s", err.Error())
-
-		return "", err
-	}
-
-	return string(bodyBytes), nil
+	return nil
 }
 
 func (pm *PaymentManager) CallProcessPayment(paymentRequest string, nodeId string) {
