@@ -175,11 +175,13 @@ func newMessageFromProto(pbm pb.Message) (BitSwapMessage, error) {
 		switch paymentMessage := pbm.PaymentMessage.(type) {
 		case *pb.Message_PaymentCommand_:
 			m.paymentCommand = &PaymentCommand {
+				commandId: paymentMessage.PaymentCommand.CommandId,
 				commandBody: paymentMessage.PaymentCommand.CommandBody,
 				commandType:     paymentMessage.PaymentCommand.CommandType,
 			}
 		case *pb.Message_PaymentResponse_:
 			m.paymentResponse = &PaymentResponse {
+				commandId: paymentMessage.PaymentResponse.CommandId,
 				commandReply: paymentMessage.PaymentResponse.CommandReply,
 			}
 		case *pb.Message_InitiatePayment_:

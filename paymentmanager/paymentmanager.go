@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
-	"strconv"
 	"sync"
 	"time"
 
@@ -42,7 +41,7 @@ type PeerHandler interface {
 
 type PaymentHandler interface {
 	GetDebt(id peer.ID) *Debt
-	CallProcessCommand(commandType int32, commandBody string) (string, error)
+	CallProcessCommand(commandId string, commandType int32, commandBody string) (string, error)
 	CallProcessPayment(paymentRequest string, requestReference string)
 	CreatePaymentInfo(amount int) (string, error)
 	CallProcessResponse(commandId string, responseBody string, nodeId string)
@@ -222,7 +221,7 @@ func (pm *PaymentManager) ProcessCommand(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	targetId, err := peer.IDFromString(command.NodeId)
+	targetId, err := peer.IDHexDecode(command.NodeId)
 
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
@@ -295,7 +294,7 @@ type initiatePayment struct {
 }
 
 func (i initiatePayment) handle(pm PaymentHandler, peerHandler PeerHandler)  {
-	pm.CallProcessPayment(i.paymentRequest, i.from.String())
+	pm.CallProcessPayment(i.paymentRequest, peer.IDHexEncode(i.from))
 }
 
 type registerReceivedBytes struct {
@@ -355,7 +354,7 @@ type processPaymentResponse struct {
 }
 
 func (v processPaymentResponse) handle(handler PaymentHandler, peerHandler PeerHandler) {
-	handler.CallProcessResponse(v.commandId, v.commandReply, v.from.String())
+	handler.CallProcessResponse(v.commandId, v.commandReply, peer.IDHexEncode(v.from))
 }
 
 type processOutgoingPaymentCommand struct {
@@ -366,7 +365,7 @@ type processOutgoingPaymentCommand struct {
 }
 
 func (p processOutgoingPaymentCommand) handle(pm PaymentHandler, peerHandler PeerHandler) {
-	response, err := pm.CallProcessCommand(p.commandType, p.commandBody)
+	response, err := pm.CallProcessCommand(p.commandId, p.commandType, p.commandBody)
 
 	if err != nil {
 		log.Error("process command failed: %s", err.Error())
@@ -404,10 +403,11 @@ func (pm *PaymentManager) CallProcessResponse(commandId string, responseBody str
 }
 
 
-func (pm *PaymentManager) CallProcessCommand(commandType int32, commandBody string) (string, error) {
-	values := map[string]string {
-		"CommandType":   strconv.Itoa(int(commandType)),
-		"CommandBody":   commandBody,
+func (pm *PaymentManager) CallProcessCommand(commandId string, commandType int32, commandBody string) (string, error) {
+	values := map[string]interface{} {
+		"CommandId":	commandId,
+		"CommandType":	commandType,
+		"CommandBody":	commandBody,
 	}
 
 	jsonValue, err := json.Marshal(values)
