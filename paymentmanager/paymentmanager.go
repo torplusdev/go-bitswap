@@ -31,7 +31,7 @@ type CommandModel struct {
 }
 
 type CommandResponseModel struct {
-	CommandResponse	interface{}
+	CommandResponse	string
 	CommandId		string
 	NodeId			string
 }
@@ -380,19 +380,12 @@ func (r requirePayment) handle(handler PaymentHandler, peerHandler PeerHandler) 
 type processIncomingPaymentCommandResponse struct {
 	target 			peer.ID
 	commandId		string
-	commandResponse interface{}
+	commandResponse string
 }
 
 func (p processIncomingPaymentCommandResponse) handle(pm PaymentHandler, peerHandler PeerHandler) {
-	data, err := json.Marshal(p.commandResponse)
 
-	if err != nil {
-		log.Error("Command response marshal failed: %s", err.Error())
-
-		return
-	}
-
-	peerHandler.PaymentResponse(p.target, p.commandId, string(data))
+	peerHandler.PaymentResponse(p.target, p.commandId, p.commandResponse)
 }
 
 type processIncomingPaymentCommand struct {
