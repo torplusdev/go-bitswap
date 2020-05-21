@@ -76,7 +76,7 @@ func TestRequirePayment(t *testing.T) {
 		paymentRequests: map[peer.ID]string{},
 	}
 
-	msg.handle(paymentMock, peerMock)
+	msg.handle(paymentMock, peerMock, nil)
 
 	expectedAmount := 50 * 1024 * 1024
 
