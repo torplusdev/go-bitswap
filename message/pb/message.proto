@@ -40,12 +40,12 @@ message Message {
 
   message PaymentCommand {
       string commandId = 1;
-      string commandBody = 2;
+      bytes commandBody = 2;
       int32  commandType = 3;
   }
 
   message PaymentResponse {
       string commandId = 1;
-      string commandReply = 2;
+      bytes commandReply = 2;
   }
 }

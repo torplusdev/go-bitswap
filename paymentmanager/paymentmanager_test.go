@@ -41,11 +41,11 @@ func (p *PeerHandlerMock) InitiatePayment(target peer.ID, paymentRequest string)
 	p.paymentRequests[target] = paymentRequest
 }
 
-func (p *PeerHandlerMock) PaymentCommand(target peer.ID, commandId string, commandBody string, commandType int32) {
+func (p *PeerHandlerMock) PaymentCommand(target peer.ID, commandId string, commandBody []byte, commandType int32) {
 	panic("implement me")
 }
 
-func (p *PeerHandlerMock) PaymentResponse(target peer.ID, commandId string, commandReply string) {
+func (p *PeerHandlerMock) PaymentResponse(target peer.ID, commandId string, commandReply []byte) {
 	panic("implement me")
 }
 

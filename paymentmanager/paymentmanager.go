@@ -26,12 +26,12 @@ var log = logging.Logger("bitswap")
 type CommandModel struct {
 	CommandId	string
 	CommandType int32
-	CommandBody string
+	CommandBody []byte
 	NodeId		string
 }
 
 type CommandResponseModel struct {
-	CommandResponse	string
+	CommandResponse	[]byte
 	CommandId		string
 	NodeId			string
 }
@@ -40,17 +40,17 @@ type CommandResponseModel struct {
 type PeerHandler interface {
 	InitiatePayment(target peer.ID, paymentRequest string)
 
-	PaymentCommand(target peer.ID, commandId string, commandBody string, commandType int32)
+	PaymentCommand(target peer.ID, commandId string, commandBody []byte, commandType int32)
 
-	PaymentResponse(target peer.ID, commandId string, commandReply string)
+	PaymentResponse(target peer.ID, commandId string, commandReply []byte)
 }
 
 type PaymentHandler interface {
 	GetDebt(id peer.ID) *Debt
-	CallProcessCommand(commandId string, commandType int32, commandBody string, nodeId string) error
+	CallProcessCommand(commandId string, commandType int32, commandBody []byte, nodeId string) error
 	CallProcessPayment(paymentRequest string, requestReference string)
 	CreatePaymentInfo(amount int) (string, error)
-	CallProcessResponse(commandId string, responseBody string, nodeId string)
+	CallProcessResponse(commandId string, responseBody []byte, nodeId string)
 }
 
 type paymentMessage interface {
@@ -312,7 +312,7 @@ func (pm *PaymentManager) RegisterReceivedBytes(ctx context.Context, id peer.ID,
 }
 
 // Process payment command received from {id} peer
-func (pm *PaymentManager) ProcessPaymentCommand(ctx context.Context, id peer.ID, commandId string, commandBody string, commandType int32) {
+func (pm *PaymentManager) ProcessPaymentCommand(ctx context.Context, id peer.ID, commandId string, commandBody []byte, commandType int32) {
 	select {
 	case pm.paymentMessages <- &processOutgoingPaymentCommand{from: id, commandId: commandId, commandBody: commandBody, commandType: commandType}:
 	case <-pm.ctx.Done():
@@ -321,7 +321,7 @@ func (pm *PaymentManager) ProcessPaymentCommand(ctx context.Context, id peer.ID,
 }
 
 // Process payment response received from {id} peer
-func (pm *PaymentManager) ProcessPaymentResponse(ctx context.Context, id peer.ID, commandId string, commandReply string) {
+func (pm *PaymentManager) ProcessPaymentResponse(ctx context.Context, id peer.ID, commandId string, commandReply []byte) {
 	select {
 	case pm.paymentMessages <- &processPaymentResponse{from: id, commandId: commandId, commandReply: commandReply}:
 	case <-pm.ctx.Done():
@@ -380,7 +380,7 @@ func (r requirePayment) handle(handler PaymentHandler, peerHandler PeerHandler) 
 type processIncomingPaymentCommandResponse struct {
 	target 			peer.ID
 	commandId		string
-	commandResponse string
+	commandResponse []byte
 }
 
 func (p processIncomingPaymentCommandResponse) handle(pm PaymentHandler, peerHandler PeerHandler) {
@@ -392,7 +392,7 @@ type processIncomingPaymentCommand struct {
 	target 		peer.ID
 	commandId	string
 	commandType int32
-	commandBody string
+	commandBody []byte
 }
 
 func (p processIncomingPaymentCommand) handle(pm PaymentHandler, peerHandler PeerHandler) {
@@ -402,7 +402,7 @@ func (p processIncomingPaymentCommand) handle(pm PaymentHandler, peerHandler Pee
 type processPaymentResponse struct {
 	from 			peer.ID
 	commandId		string
-	commandReply	string
+	commandReply	[]byte
 }
 
 func (v processPaymentResponse) handle(handler PaymentHandler, peerHandler PeerHandler) {
@@ -412,7 +412,7 @@ func (v processPaymentResponse) handle(handler PaymentHandler, peerHandler PeerH
 type processOutgoingPaymentCommand struct {
 	from 		peer.ID
 	commandId	string
-	commandBody	string
+	commandBody	[]byte
 	commandType	int32
 }
 
@@ -424,8 +424,8 @@ func (p processOutgoingPaymentCommand) handle(pm PaymentHandler, peerHandler Pee
 	}
 }
 
-func (pm *PaymentManager) CallProcessResponse(commandId string, responseBody string, nodeId string) {
-	values := map[string]string {
+func (pm *PaymentManager) CallProcessResponse(commandId string, responseBody []byte, nodeId string) {
+	values := map[string]interface{} {
 		"CommandId":   	commandId,
 		"ResponseBody": responseBody,
 		"NodeId": 		nodeId,
@@ -451,7 +451,7 @@ func (pm *PaymentManager) CallProcessResponse(commandId string, responseBody str
 }
 
 
-func (pm *PaymentManager) CallProcessCommand(commandId string, commandType int32, commandBody string, nodeId string) error {
+func (pm *PaymentManager) CallProcessCommand(commandId string, commandType int32, commandBody []byte, nodeId string) error {
 	values := map[string]interface{} {
 		"NodeId":		nodeId,
 		"CommandId":	commandId,

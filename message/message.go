@@ -44,9 +44,9 @@ type BitSwapMessage interface {
 	// Bitswap +
 	InitiatePayment(paymentRequest string)
 
-	PaymentCommand(commandId string, commandBody string, commandType int32)
+	PaymentCommand(commandId string, commandBody []byte, commandType int32)
 
-	PaymentResponse(commandId string, commandReply string)
+	PaymentResponse(commandId string, commandReply []byte)
 
 	GetInitiatePayment() *InitiatePayment
 
@@ -84,7 +84,7 @@ func (i *InitiatePayment) GetPaymentRequest() string {
 
 type PaymentCommand struct {
 	commandId 	string
-	commandBody string
+	commandBody []byte
 	commandType int32
 }
 
@@ -92,7 +92,7 @@ func (i *PaymentCommand) GetCommandId() string {
 	return i.commandId
 }
 
-func (i *PaymentCommand) GetCommandBody() string {
+func (i *PaymentCommand) GetCommandBody() []byte {
 	return i.commandBody
 }
 
@@ -102,14 +102,14 @@ func (i *PaymentCommand) GetCommandType() int32 {
 
 type PaymentResponse struct {
 	commandId		string
-	commandReply 	string
+	commandReply 	[]byte
 }
 
 func (i *PaymentResponse) GetCommandId() string {
 	return i.commandId
 }
 
-func (i *PaymentResponse) GetCommandReply() string {
+func (i *PaymentResponse) GetCommandReply() []byte {
 	return i.commandReply
 }
 
@@ -229,7 +229,7 @@ func (m *impl) InitiatePayment(paymentRequest string) {
 	}
 }
 
-func (m *impl) PaymentCommand(commandId string, commandBody string, commandType int32) {
+func (m *impl) PaymentCommand(commandId string, commandBody []byte, commandType int32) {
 	m.paymentCommand = &PaymentCommand{
 		commandId,
 		commandBody,
@@ -237,7 +237,7 @@ func (m *impl) PaymentCommand(commandId string, commandBody string, commandType 
 	}
 }
 
-func (m *impl) PaymentResponse(commandId string, commandReply string) {
+func (m *impl) PaymentResponse(commandId string, commandReply []byte) {
 	m.paymentResponse = &PaymentResponse{
 		commandId,
 		commandReply,
