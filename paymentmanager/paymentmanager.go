@@ -32,9 +32,9 @@ type CommandResponseModel struct {
 type PeerHandler interface {
 	InitiatePayment(target peer.ID, paymentRequest string)
 
-	PaymentCommand(target peer.ID, commandId string, commandBody []byte, commandType int32)
+	PaymentCommand(target peer.ID, commandId string, commandBody []byte, commandType int32, sessionId string)
 
-	PaymentResponse(target peer.ID, commandId string, commandReply []byte)
+	PaymentResponse(target peer.ID, commandId string, commandReply []byte, sessionId string)
 }
 
 type PaymentHandler interface {
@@ -213,18 +213,18 @@ func (pm *PaymentManager) RegisterReceivedBytes(ctx context.Context, id peer.ID,
 }
 
 // Process payment command received from {id} peer
-func (pm *PaymentManager) ProcessPaymentCommand(ctx context.Context, id peer.ID, commandId string, commandBody []byte, commandType int32) {
+func (pm *PaymentManager) ProcessPaymentCommand(ctx context.Context, id peer.ID, commandId string, commandBody []byte, commandType int32, sessionId string) {
 	select {
-	case pm.paymentMessages <- &processOutgoingPaymentCommand{from: id, commandId: commandId, commandBody: commandBody, commandType: commandType}:
+	case pm.paymentMessages <- &processOutgoingPaymentCommand{from: id, commandId: commandId, commandBody: commandBody, commandType: commandType, sessionId: sessionId}:
 	case <-pm.ctx.Done():
 	case <-ctx.Done():
 	}
 }
 
 // Process payment response received from {id} peer
-func (pm *PaymentManager) ProcessPaymentResponse(ctx context.Context, id peer.ID, commandId string, commandReply []byte) {
+func (pm *PaymentManager) ProcessPaymentResponse(ctx context.Context, id peer.ID, commandId string, commandReply []byte, sessionId string) {
 	select {
-	case pm.paymentMessages <- &processPaymentResponse{from: id, commandId: commandId, commandReply: commandReply}:
+	case pm.paymentMessages <- &processPaymentResponse{from: id, commandId: commandId, commandReply: commandReply, sessionId: sessionId}:
 	case <-pm.ctx.Done():
 	case <-ctx.Done():
 	}
@@ -244,7 +244,7 @@ func (i initiatePayment) handle(paymentHandler PaymentHandler, peerHandler PeerH
 
 	debt := paymentHandler.GetDebt(i.from)
 
-	if int(quantity) < debt.receivedBytes {
+	if int(quantity) > debt.receivedBytes {
 		log.Error("invalid quantity requested")
 	}
 
@@ -294,10 +294,11 @@ type processPaymentResponse struct {
 	from 			peer.ID
 	commandId		string
 	commandReply	[]byte
+	sessionId 		string
 }
 
 func (v processPaymentResponse) handle(paymentHandler PaymentHandler, peerHandler PeerHandler, client ClientHandler) {
-	client.ProcessResponse(v.commandId, v.commandReply, peer.IDHexEncode(v.from))
+	client.ProcessResponse(v.commandId, v.commandReply, peer.IDHexEncode(v.from), v.sessionId)
 }
 
 type processOutgoingPaymentCommand struct {
@@ -305,10 +306,11 @@ type processOutgoingPaymentCommand struct {
 	commandId	string
 	commandBody	[]byte
 	commandType	int32
+	sessionId	string
 }
 
 func (p processOutgoingPaymentCommand) handle(paymentHandler PaymentHandler, peerHandler PeerHandler, client ClientHandler) {
-	err := client.ProcessCommand(p.commandId, p.commandType, p.commandBody, peer.IDHexEncode(p.from))
+	err := client.ProcessCommand(p.commandId, p.commandType, p.commandBody, peer.IDHexEncode(p.from), p.sessionId)
 
 	if err != nil {
 		log.Error("process command failed: %s", err.Error())

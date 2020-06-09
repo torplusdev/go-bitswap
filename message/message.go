@@ -44,9 +44,9 @@ type BitSwapMessage interface {
 	// Bitswap +
 	InitiatePayment(paymentRequest string)
 
-	PaymentCommand(commandId string, commandBody []byte, commandType int32)
+	PaymentCommand(commandId string, commandBody []byte, commandType int32, sessionId string)
 
-	PaymentResponse(commandId string, commandReply []byte)
+	PaymentResponse(commandId string, commandReply []byte, sessionId string)
 
 	GetInitiatePayment() *InitiatePayment
 
@@ -86,6 +86,7 @@ type PaymentCommand struct {
 	commandId 	string
 	commandBody []byte
 	commandType int32
+	sessionId	string
 }
 
 func (i *PaymentCommand) GetCommandId() string {
@@ -100,9 +101,14 @@ func (i *PaymentCommand) GetCommandType() int32 {
 	return i.commandType
 }
 
+func (i *PaymentCommand) GetSessionId() string  {
+	return i.sessionId
+}
+
 type PaymentResponse struct {
 	commandId		string
 	commandReply 	[]byte
+	sessionId		string
 }
 
 func (i *PaymentResponse) GetCommandId() string {
@@ -111,6 +117,10 @@ func (i *PaymentResponse) GetCommandId() string {
 
 func (i *PaymentResponse) GetCommandReply() []byte {
 	return i.commandReply
+}
+
+func (i *PaymentResponse) GetSessionId() string  {
+	return i.sessionId
 }
 
 // New returns a new, empty bitswap message
@@ -177,12 +187,14 @@ func newMessageFromProto(pbm pb.Message) (BitSwapMessage, error) {
 			m.paymentCommand = &PaymentCommand {
 				commandId: paymentMessage.PaymentCommand.CommandId,
 				commandBody: paymentMessage.PaymentCommand.CommandBody,
-				commandType:     paymentMessage.PaymentCommand.CommandType,
+				commandType: paymentMessage.PaymentCommand.CommandType,
+				sessionId: paymentMessage.PaymentCommand.SessionId,
 			}
 		case *pb.Message_PaymentResponse_:
 			m.paymentResponse = &PaymentResponse {
 				commandId: paymentMessage.PaymentResponse.CommandId,
 				commandReply: paymentMessage.PaymentResponse.CommandReply,
+				sessionId: paymentMessage.PaymentResponse.SessionId,
 			}
 		case *pb.Message_InitiatePayment_:
 			m.initiatePayment = &InitiatePayment {
@@ -229,18 +241,20 @@ func (m *impl) InitiatePayment(paymentRequest string) {
 	}
 }
 
-func (m *impl) PaymentCommand(commandId string, commandBody []byte, commandType int32) {
+func (m *impl) PaymentCommand(commandId string, commandBody []byte, commandType int32, sessionId string) {
 	m.paymentCommand = &PaymentCommand{
 		commandId,
 		commandBody,
 		commandType,
+		sessionId,
 	}
 }
 
-func (m *impl) PaymentResponse(commandId string, commandReply []byte) {
+func (m *impl) PaymentResponse(commandId string, commandReply []byte, sessionId string) {
 	m.paymentResponse = &PaymentResponse{
 		commandId,
 		commandReply,
+		sessionId,
 	}
 }
 
@@ -343,6 +357,7 @@ func (m * impl) ToPaymentProto(pbm *pb.Message) {
 				CommandId: m.paymentCommand.commandId,
 				CommandBody: m.paymentCommand.commandBody,
 				CommandType: m.paymentCommand.commandType,
+				SessionId:   m.paymentCommand.sessionId,
 			},
 		}
 	}
@@ -352,6 +367,7 @@ func (m * impl) ToPaymentProto(pbm *pb.Message) {
 			PaymentResponse: &pb.Message_PaymentResponse{
 				CommandId: m.paymentResponse.commandId,
 				CommandReply: m.paymentResponse.commandReply,
+				SessionId:   m.paymentResponse.sessionId,
 			},
 		}
 	}

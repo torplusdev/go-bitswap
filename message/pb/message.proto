@@ -42,10 +42,12 @@ message Message {
       string commandId = 1;
       bytes commandBody = 2;
       int32  commandType = 3;
+      string sessionId = 4;
   }
 
   message PaymentResponse {
       string commandId = 1;
       bytes commandReply = 2;
+      string sessionId = 3;
   }
 }

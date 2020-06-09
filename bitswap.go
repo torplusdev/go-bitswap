@@ -422,13 +422,13 @@ func (bs *Bitswap) ReceiveMessage(ctx context.Context, p peer.ID, incoming bsmsg
 	paymentCommand := incoming.GetPaymentCommand()
 
 	if paymentCommand != nil {
-		bs.paym.ProcessPaymentCommand(ctx, p, paymentCommand.GetCommandId(), paymentCommand.GetCommandBody(), paymentCommand.GetCommandType())
+		bs.paym.ProcessPaymentCommand(ctx, p, paymentCommand.GetCommandId(), paymentCommand.GetCommandBody(), paymentCommand.GetCommandType(), paymentCommand.GetSessionId())
 	}
 
 	paymentResponse := incoming.GetPaymentResponse()
 
 	if paymentResponse != nil {
-		bs.paym.ProcessPaymentResponse(ctx, p, paymentResponse.GetCommandId(), paymentResponse.GetCommandReply())
+		bs.paym.ProcessPaymentResponse(ctx, p, paymentResponse.GetCommandId(), paymentResponse.GetCommandReply(), paymentResponse.GetSessionId())
 	}
 }
 

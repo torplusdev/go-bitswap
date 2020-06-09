@@ -9,6 +9,7 @@ import (
 )
 
 type OutgoingCommandModel struct {
+	SessionId 	string
 	CommandId	string
 	CommandType int32
 	CommandBody []byte
@@ -20,6 +21,7 @@ type OutgoingCommandResponseModel struct {
 	ResponseBody	[]byte
 	CommandId		string
 	NodeId			string
+	SessionId 		string
 }
 
 type ValidationResponseModel struct {
@@ -38,11 +40,12 @@ func NewClient(channelUrl string, commandListenPort int) ClientHandler {
 	}
 }
 
-func (pm *PPClient) ProcessResponse(commandId string, responseBody []byte, nodeId string) {
+func (pm *PPClient) ProcessResponse(commandId string, responseBody []byte, nodeId string, sessionId string) {
 	values := &OutgoingCommandResponseModel{
 		ResponseBody: responseBody,
 		CommandId:    commandId,
 		NodeId:       nodeId,
+		SessionId:    sessionId,
 	}
 
 	jsonValue, err := json.Marshal(values)
@@ -65,12 +68,13 @@ func (pm *PPClient) ProcessResponse(commandId string, responseBody []byte, nodeI
 }
 
 
-func (pm *PPClient) ProcessCommand(commandId string, commandType int32, commandBody []byte, nodeId string) error {
+func (pm *PPClient) ProcessCommand(commandId string, commandType int32, commandBody []byte, nodeId string, sessionId string) error {
 	values := &OutgoingCommandModel{
 		CommandId:   commandId,
 		CommandType: commandType,
 		CommandBody: commandBody,
 		NodeId:      nodeId,
+		SessionId: 	 sessionId,
 		CallbackUrl: fmt.Sprintf("http://localhost:%d/api/commandResponse", pm.commandListenPort),
 	}
 
@@ -98,10 +102,11 @@ func (pm *PPClient) ProcessCommand(commandId string, commandType int32, commandB
 }
 
 func (pm *PPClient) ProcessPayment(paymentRequest string, nodeId string) {
-	values := map[string]string {
+	values := map[string]interface{} {
 		"CallbackUrl":      fmt.Sprintf("http://localhost:%d/api/command", pm.commandListenPort),
 		"PaymentRequest":   paymentRequest,
 		"NodeId": 			nodeId,
+		"Route":			make([]string, 0), // TODO: remove to start chain payment
 	}
 
 	jsonValue, err := json.Marshal(values)

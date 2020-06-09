@@ -11,6 +11,7 @@ import (
 )
 
 type IncomingCommandModel struct {
+	SessionId	string
 	CommandId	string
 	CommandType int32
 	CommandBody []byte
@@ -21,6 +22,7 @@ type IncomingCommandResponseModel struct {
 	CommandResponse	[]byte
 	CommandId		string
 	NodeId			string
+	SessionId		string
 }
 
 type PPCallbackServer struct {
@@ -84,7 +86,7 @@ func (p *PPCallbackServer) ProcessCommandResponse(w http.ResponseWriter, r *http
 		return
 	}
 
-	p.peerHandler.PaymentResponse(targetId, request.CommandId, request.CommandResponse)
+	p.peerHandler.PaymentResponse(targetId, request.CommandId, request.CommandResponse, request.SessionId)
 
 	w.WriteHeader(http.StatusOK)
 }
@@ -111,7 +113,7 @@ func (p *PPCallbackServer) ProcessCommand(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	p.peerHandler.PaymentCommand(targetId, request.CommandId, request.CommandBody, request.CommandType)
+	p.peerHandler.PaymentCommand(targetId, request.CommandId, request.CommandBody, request.CommandType, request.SessionId)
 
 	w.WriteHeader(http.StatusOK)
 }

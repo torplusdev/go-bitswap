@@ -26,9 +26,9 @@ type fakePeer struct {
 
 func (fp *fakePeer) InitiatePayment(paymentRequest string) {}
 
-func (fp *fakePeer) PaymentCommand(commandId string, commandBody []byte, commandType int32) {}
+func (fp *fakePeer) PaymentCommand(commandId string, commandBody []byte, commandType int32, sessionId string) {}
 
-func (fp *fakePeer) PaymentResponse(commandId string, commandReply []byte) {}
+func (fp *fakePeer) PaymentResponse(commandId string, commandReply []byte, sessionId string) {}
 
 func (fp *fakePeer) Startup()  {}
 

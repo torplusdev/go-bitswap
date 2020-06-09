@@ -68,8 +68,8 @@ func (mq *MessageQueue) InitiatePayment(paymentRequest string) {
 	}
 }
 
-func (mq *MessageQueue) PaymentCommand(commandId string, commandBody []byte, commandType int32) {
-	if !mq.paymentCommand(commandId, commandBody, commandType) {
+func (mq *MessageQueue) PaymentCommand(commandId string, commandBody []byte, commandType int32, sessionId string) {
+	if !mq.paymentCommand(commandId, commandBody, commandType, sessionId) {
 		return
 	}
 	select {
@@ -78,8 +78,8 @@ func (mq *MessageQueue) PaymentCommand(commandId string, commandBody []byte, com
 	}
 }
 
-func (mq *MessageQueue) PaymentResponse(commandId string, commandReply []byte) {
-	if !mq.paymentResponse(commandId, commandReply) {
+func (mq *MessageQueue) PaymentResponse(commandId string, commandReply []byte, sessionId string) {
+	if !mq.paymentResponse(commandId, commandReply, sessionId) {
 		return
 	}
 	select {
@@ -190,7 +190,7 @@ func (mq *MessageQueue) initiatePayment(paymentRequest string) bool {
 	return true
 }
 
-func (mq *MessageQueue) paymentCommand(commandId string, commandBody []byte, commandType int32) bool {
+func (mq *MessageQueue) paymentCommand(commandId string, commandBody []byte, commandType int32, sessionId string) bool {
 	mq.nextMessageLk.Lock()
 	defer mq.nextMessageLk.Unlock()
 	// if we have no message held allocate a new one
@@ -198,12 +198,12 @@ func (mq *MessageQueue) paymentCommand(commandId string, commandBody []byte, com
 		mq.nextMessage = bsmsg.New(false)
 	}
 
-	mq.nextMessage.PaymentCommand(commandId, commandBody, commandType)
+	mq.nextMessage.PaymentCommand(commandId, commandBody, commandType, sessionId)
 
 	return true
 }
 
-func (mq *MessageQueue) paymentResponse(commandId string, commandReply []byte) bool {
+func (mq *MessageQueue) paymentResponse(commandId string, commandReply []byte, sessionId string) bool {
 	mq.nextMessageLk.Lock()
 	defer mq.nextMessageLk.Unlock()
 	// if we have no message held allocate a new one
@@ -211,7 +211,7 @@ func (mq *MessageQueue) paymentResponse(commandId string, commandReply []byte) b
 		mq.nextMessage = bsmsg.New(false)
 	}
 
-	mq.nextMessage.PaymentResponse(commandId, commandReply)
+	mq.nextMessage.PaymentResponse(commandId, commandReply, sessionId)
 
 	return true
 }
