@@ -28,15 +28,39 @@ type ValidationResponseModel struct {
 	Quantity	uint32
 }
 
+type ProcessPaymentRequestModel struct {
+	CallbackUrl		string
+	PaymentRequest	string
+	NodeId			string
+	Route			[]string
+}
+
+type ProcessPaymentResponseModel struct {
+	SessionId 		string
+}
+
 type PPClient struct {
 	channelUrl			string
 	commandListenPort	int
+	sessionHandler 		*SessionHandler
 }
 
-func NewClient(channelUrl string, commandListenPort int) ClientHandler {
+type PaymentTransaction struct {
+	TransactionSourceAddress  string
+	ReferenceAmountIn         uint32
+	AmountOut                 uint32
+	XDR                       string
+	PaymentSourceAddress	  string
+	PaymentDestinationAddress string
+	StellarNetworkToken       string
+	ServiceSessionId		  string
+}
+
+func NewClient(channelUrl string, commandListenPort int, sessionHandler *SessionHandler) ClientHandler {
 	return &PPClient{
-		channelUrl:        channelUrl,
-		commandListenPort: commandListenPort,
+		channelUrl:			channelUrl,
+		commandListenPort:	commandListenPort,
+		sessionHandler: 	sessionHandler,
 	}
 }
 
@@ -66,7 +90,6 @@ func (pm *PPClient) ProcessResponse(commandId string, responseBody []byte, nodeI
 
 	log.Info("process command response call status: %d", reply.StatusCode)
 }
-
 
 func (pm *PPClient) ProcessCommand(commandId string, commandType int32, commandBody []byte, nodeId string, sessionId string) error {
 	values := &OutgoingCommandModel{
@@ -102,14 +125,14 @@ func (pm *PPClient) ProcessCommand(commandId string, commandType int32, commandB
 }
 
 func (pm *PPClient) ProcessPayment(paymentRequest string, nodeId string) {
-	values := map[string]interface{} {
-		"CallbackUrl":      fmt.Sprintf("http://localhost:%d/api/command", pm.commandListenPort),
-		"PaymentRequest":   paymentRequest,
-		"NodeId": 			nodeId,
-		"Route":			make([]string, 0), // TODO: remove to start chain payment
+	request := &ProcessPaymentRequestModel {
+		CallbackUrl:      fmt.Sprintf("http://localhost:%d/api/command", pm.commandListenPort),
+		PaymentRequest:   paymentRequest,
+		NodeId: 			nodeId,
+		Route:			make([]string, 0), // TODO: remove to start chain payment
 	}
 
-	jsonValue, err := json.Marshal(values)
+	jsonValue, err := json.Marshal(request)
 
 	if err != nil {
 		log.Error("failed to serialize process payment request: %s", err.Error())
@@ -126,6 +149,20 @@ func (pm *PPClient) ProcessPayment(paymentRequest string, nodeId string) {
 	}
 
 	log.Info("process payment call status: %d", reply.StatusCode)
+
+	defer reply.Body.Close()
+
+	response := &ProcessPaymentResponseModel{}
+
+	err = json.NewDecoder(reply.Body).Decode(response)
+
+	if err != nil {
+		log.Error("failed to read process payment response: %s", err.Error())
+
+		return
+	}
+
+	pm.sessionHandler.Open(response.SessionId, nodeId)
 }
 
 func (pm *PPClient) ValidatePayment(paymentRequest string) (uint32, error) {
@@ -166,7 +203,7 @@ func (pm *PPClient) ValidatePayment(paymentRequest string) (uint32, error) {
 	return response.Quantity, nil
 }
 
-func (pm *PPClient) CreatePaymentInfo(amount int) (string, error) {
+func (pm *PPClient) CreatePaymentInfo(amount uint32) (string, error) {
 	values := map[string]interface{}{"ServiceType": "ipfs", "CommodityType": "data", "Amount": amount}
 
 	jsonValue, err := json.Marshal(values)
@@ -198,6 +235,31 @@ func (pm *PPClient) CreatePaymentInfo(amount int) (string, error) {
 	}
 
 	return string(bodyBytes), nil
+}
+
+func (pm *PPClient) GetTransaction(sessionId string) (*PaymentTransaction, error) {
+	reply, err := http.Get(fmt.Sprintf("%s/api/utility/transaction/%s", pm.channelUrl, sessionId))
+
+	if err != nil {
+		log.Error("failed to get transaction: %s", err.Error())
+
+		return nil, err
+	}
+
+	defer reply.Body.Close()
+
+	log.Info("get transaction call status: %d", reply.StatusCode)
+
+	trx := &PaymentTransaction{}
+	err = json.NewDecoder(reply.Body).Decode(trx)
+
+	if err != nil {
+		log.Error("failed to deserialize transaction: %s", err.Error())
+
+		return nil, err
+	}
+
+	return trx, nil
 }
 
 

@@ -32,6 +32,7 @@ message Message {
       InitiatePayment initiatePayment = 4;
       PaymentCommand  paymentCommand = 5;
       PaymentResponse paymentResponse = 6;
+      PaymentStatusResponse paymentStatusResponse = 7;
   }
 
   message InitiatePayment {
@@ -49,5 +50,10 @@ message Message {
       string commandId = 1;
       bytes commandReply = 2;
       string sessionId = 3;
+  }
+
+  message PaymentStatusResponse {
+      string sessionId = 1;
+      bool status = 2;
   }
 }

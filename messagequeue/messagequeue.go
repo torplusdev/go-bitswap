@@ -88,6 +88,16 @@ func (mq *MessageQueue) PaymentResponse(commandId string, commandReply []byte, s
 	}
 }
 
+func (mq *MessageQueue) PaymentStatusResponse(sessionId string, status bool) {
+	if !mq.paymentStatusResponse(sessionId, status) {
+		return
+	}
+	select {
+	case mq.outgoingWork <- struct{}{}:
+	default:
+	}
+}
+
 // AddMessage adds new entries to an outgoing message for a given session.
 func (mq *MessageQueue) AddMessage(entries []bsmsg.Entry, ses uint64) {
 	if !mq.addEntries(entries, ses) {
@@ -212,6 +222,19 @@ func (mq *MessageQueue) paymentResponse(commandId string, commandReply []byte, s
 	}
 
 	mq.nextMessage.PaymentResponse(commandId, commandReply, sessionId)
+
+	return true
+}
+
+func (mq *MessageQueue) paymentStatusResponse(sessionId string, status bool) bool {
+	mq.nextMessageLk.Lock()
+	defer mq.nextMessageLk.Unlock()
+	// if we have no message held allocate a new one
+	if mq.nextMessage == nil {
+		mq.nextMessage = bsmsg.New(false)
+	}
+
+	mq.nextMessage.PaymentStatusResponse(sessionId, status)
 
 	return true
 }

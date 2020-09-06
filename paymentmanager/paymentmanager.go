@@ -1,11 +1,7 @@
 package paymentmanager
 
 import (
-	"container/list"
 	"context"
-	"sync"
-	"time"
-
 	logging "github.com/ipfs/go-log"
 	"github.com/ipfs/go-metrics-interface"
 
@@ -35,6 +31,8 @@ type PeerHandler interface {
 	PaymentCommand(target peer.ID, commandId string, commandBody []byte, commandType int32, sessionId string)
 
 	PaymentResponse(target peer.ID, commandId string, commandReply []byte, sessionId string)
+
+	PaymentStatusResponse(target peer.ID, sessionId string, success bool)
 }
 
 type PaymentHandler interface {
@@ -65,13 +63,11 @@ type PaymentManager struct {
 type Debt struct {
 	id peer.ID
 
-	validationQueue		*list.List
+	requestedAmount		uint32
 
-	requestedAmount		int
+	transferredBytes 	uint32
 
-	transferredBytes 	int
-
-	receivedBytes 		int
+	receivedBytes 		uint32
 }
 
 const (
@@ -98,15 +94,15 @@ func New(ctx context.Context, peerHandler PeerHandler, network bsnet.BitSwapNetw
 }
 
 func (pm *PaymentManager) SetPPChannelSettings(commandListenPort int, channelUrl string) {
-	pm.server = NewServer(commandListenPort, pm.peerHandler)
-	pm.client = NewClient(channelUrl, commandListenPort)
+	sessionHandler := NewSessionHandler()
+
+	pm.server = NewServer(commandListenPort, pm.peerHandler, sessionHandler)
+	pm.client = NewClient(channelUrl, commandListenPort, sessionHandler)
 }
 
 // Startup starts processing for the PayManager.
 func (pm *PaymentManager) Startup() {
 	go pm.run()
-
-	go pm.validationTimer()
 
 	if pm.server != nil {
 		go pm.server.Start()
@@ -133,41 +129,6 @@ func (pm *PaymentManager) run() {
 	}
 }
 
-func (pm *PaymentManager) validationTimer() {
-	for {
-		timer := time.NewTimer(5 * time.Second)
-
-		select {
-		case <- timer.C:
-			pm.validatePeers()
-			timer.Reset(5 * time.Second) // Restart timer after validation finished
-		case <-pm.ctx.Done():
-			timer.Stop()
-			return
-		}
-	}
-}
-
-func (pm *PaymentManager) validatePeers() {
-	var wg sync.WaitGroup
-
-	for _, debt := range pm.debtRegistry {
-		wg.Add(1)
-
-		go func() {
-			defer wg.Done()
-
-			debt.validateTransactions(pm)
-		}()
-	}
-
-	wg.Wait()
-}
-
-func (d *Debt) validateTransactions(pm PaymentHandler) {
-
-}
-
 func (pm *PaymentManager) GetDebt(id peer.ID) *Debt {
 	debt, ok := pm.debtRegistry[id]
 
@@ -177,7 +138,6 @@ func (pm *PaymentManager) GetDebt(id peer.ID) *Debt {
 
 	debt = &Debt {
 		id: id,
-		validationQueue: list.New(),
 	}
 
 	pm.debtRegistry[id] = debt
@@ -230,6 +190,15 @@ func (pm *PaymentManager) ProcessPaymentResponse(ctx context.Context, id peer.ID
 	}
 }
 
+// Process payment status response received from {id} peer
+func (pm *PaymentManager) ProcessPaymentStatusResponse(ctx context.Context, id peer.ID, sessionId string, status bool) {
+	select {
+	case pm.paymentMessages <- &processPaymentStatusResponse{from: id, sessionId: sessionId, status: status}:
+	case <-pm.ctx.Done():
+	case <-ctx.Done():
+	}
+}
+
 type initiatePayment struct {
 	from peer.ID
 	paymentRequest string
@@ -244,7 +213,7 @@ func (i initiatePayment) handle(paymentHandler PaymentHandler, peerHandler PeerH
 
 	debt := paymentHandler.GetDebt(i.from)
 
-	if int(quantity) > debt.receivedBytes {
+	if quantity > debt.receivedBytes {
 		log.Error("invalid quantity requested")
 	}
 
@@ -259,7 +228,7 @@ type registerReceivedBytes struct {
 func (r registerReceivedBytes) handle(paymentHandler PaymentHandler, peerHandler PeerHandler, client ClientHandler) {
 	debt := paymentHandler.GetDebt(r.from)
 
-	debt.receivedBytes += r.msgSize
+	debt.receivedBytes += uint32(r.msgSize)
 }
 
 type requirePayment struct {
@@ -270,7 +239,7 @@ type requirePayment struct {
 func (r requirePayment) handle(paymentHandler PaymentHandler, peerHandler PeerHandler, client ClientHandler) {
 	debt := paymentHandler.GetDebt(r.target)
 
-	debt.transferredBytes += r.msgSize
+	debt.transferredBytes += uint32(r.msgSize)
 
 	if debt.transferredBytes >= requestPaymentAfterBytes {
 		amount := debt.transferredBytes
@@ -299,6 +268,30 @@ type processPaymentResponse struct {
 
 func (v processPaymentResponse) handle(paymentHandler PaymentHandler, peerHandler PeerHandler, client ClientHandler) {
 	client.ProcessResponse(v.commandId, v.commandReply, peer.IDHexEncode(v.from), v.sessionId)
+}
+
+type processPaymentStatusResponse struct {
+	from 			peer.ID
+	sessionId 		string
+	status 			bool
+}
+
+func (m processPaymentStatusResponse)  handle(paymentHandler PaymentHandler, peerHandler PeerHandler, client ClientHandler) {
+	if !m.status {
+		// TODO: retry ?
+
+		return
+	}
+
+	trx, err := client.GetTransaction(m.sessionId)
+
+	if err != nil {
+		log.Error("Transaction not found", err.Error())
+	}
+
+	debt := paymentHandler.GetDebt(m.from)
+
+	debt.requestedAmount -= trx.AmountOut
 }
 
 type processOutgoingPaymentCommand struct {

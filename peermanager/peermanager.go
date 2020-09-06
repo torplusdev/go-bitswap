@@ -15,6 +15,7 @@ type PeerQueue interface {
 	InitiatePayment(paymentRequest string)
 	PaymentCommand(commandId string, commandBody []byte, commandType int32, sessionId string)
 	PaymentResponse(commandId string, commandReply []byte, sessionId string)
+	PaymentStatusResponse(sessionId string, status bool)
 	Startup()
 	AddWantlist(initialWants *wantlist.SessionTrackedWantlist)
 	Shutdown()
@@ -115,6 +116,12 @@ func (pm *PeerManager) PaymentResponse(target peer.ID, commandId string, command
 	pqi := pm.getOrCreate(target)
 
 	pqi.pq.PaymentResponse(commandId, commandReply, sessionId)
+}
+
+func (pm *PeerManager) PaymentStatusResponse(target peer.ID, sessionId string, status bool) {
+	pqi := pm.getOrCreate(target)
+
+	pqi.pq.PaymentStatusResponse(sessionId, status)
 }
 
 func (pm *PeerManager) getOrCreate(p peer.ID) *peerQueueInstance {

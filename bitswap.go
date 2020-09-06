@@ -430,6 +430,12 @@ func (bs *Bitswap) ReceiveMessage(ctx context.Context, p peer.ID, incoming bsmsg
 	if paymentResponse != nil {
 		bs.paym.ProcessPaymentResponse(ctx, p, paymentResponse.GetCommandId(), paymentResponse.GetCommandReply(), paymentResponse.GetSessionId())
 	}
+
+	paymentStatusResponse := incoming.GetPaymentStatusResponse()
+
+	if paymentStatusResponse != nil {
+		bs.paym.ProcessPaymentStatusResponse(ctx, p, paymentStatusResponse.GetSessionId(), paymentStatusResponse.GetStatus())
+	}
 }
 
 func (bs *Bitswap) updateReceiveCounters(blocks []blocks.Block) int {

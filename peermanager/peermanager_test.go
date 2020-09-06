@@ -30,6 +30,8 @@ func (fp *fakePeer) PaymentCommand(commandId string, commandBody []byte, command
 
 func (fp *fakePeer) PaymentResponse(commandId string, commandReply []byte, sessionId string) {}
 
+func (fp *fakePeer) PaymentStatusResponse(sessionId string, status bool) {}
+
 func (fp *fakePeer) Startup()  {}
 
 func (fp *fakePeer) Shutdown() {}

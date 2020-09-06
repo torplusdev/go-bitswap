@@ -49,6 +49,10 @@ func (p *PeerHandlerMock) PaymentResponse(target peer.ID, commandId string, comm
 	panic("implement me")
 }
 
+func (p *PeerHandlerMock) PaymentStatusResponse(target peer.ID, sessionId string, status bool) {
+	panic("implement me")
+}
+
 func TestRequirePayment(t *testing.T) {
 
 	msg := requirePayment {

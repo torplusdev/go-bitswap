@@ -48,11 +48,15 @@ type BitSwapMessage interface {
 
 	PaymentResponse(commandId string, commandReply []byte, sessionId string)
 
+	PaymentStatusResponse(sessionId string, status bool)
+
 	GetInitiatePayment() *InitiatePayment
 
 	GetPaymentCommand() *PaymentCommand
 
 	GetPaymentResponse() *PaymentResponse
+
+	GetPaymentStatusResponse() *PaymentStatusResponse
 }
 
 // Exportable is an interface for structures than can be
@@ -69,9 +73,10 @@ type impl struct {
 	wantlist map[cid.Cid]*Entry
 	blocks   map[cid.Cid]blocks.Block
 
-	initiatePayment	*InitiatePayment
-	paymentCommand	*PaymentCommand
-	paymentResponse *PaymentResponse
+	initiatePayment			*InitiatePayment
+	paymentCommand			*PaymentCommand
+	paymentResponse 		*PaymentResponse
+	paymentStatusResponse	*PaymentStatusResponse
 }
 
 type InitiatePayment struct {
@@ -119,8 +124,21 @@ func (i *PaymentResponse) GetCommandReply() []byte {
 	return i.commandReply
 }
 
-func (i *PaymentResponse) GetSessionId() string  {
+func (i *PaymentResponse) GetSessionId() string {
 	return i.sessionId
+}
+
+type PaymentStatusResponse struct {
+	sessionId		string
+	status			bool
+}
+
+func (i *PaymentStatusResponse) GetSessionId() string {
+	return i.sessionId
+}
+
+func (i *PaymentStatusResponse) GetStatus() bool {
+	return i.status
 }
 
 // New returns a new, empty bitswap message
@@ -196,6 +214,11 @@ func newMessageFromProto(pbm pb.Message) (BitSwapMessage, error) {
 				commandReply: paymentMessage.PaymentResponse.CommandReply,
 				sessionId: paymentMessage.PaymentResponse.SessionId,
 			}
+		case *pb.Message_PaymentStatusResponse_:
+			m.paymentStatusResponse = &PaymentStatusResponse {
+				sessionId: paymentMessage.PaymentStatusResponse.SessionId,
+				status:    paymentMessage.PaymentStatusResponse.Status,
+			}
 		case *pb.Message_InitiatePayment_:
 			m.initiatePayment = &InitiatePayment {
 				paymentRequest: paymentMessage.InitiatePayment.PaymentRequest,
@@ -211,7 +234,7 @@ func (m *impl) Full() bool {
 }
 
 func (m *impl) Empty() bool {
-	return len(m.blocks) == 0 && len(m.wantlist) == 0 && m.initiatePayment == nil && m.paymentCommand == nil && m.paymentResponse == nil
+	return len(m.blocks) == 0 && len(m.wantlist) == 0 && m.initiatePayment == nil && m.paymentCommand == nil && m.paymentResponse == nil && m.paymentStatusResponse == nil
 }
 
 func (m *impl) Wantlist() []Entry {
@@ -235,6 +258,10 @@ func (m *impl) GetPaymentResponse() *PaymentResponse {
 	return m.paymentResponse
 }
 
+func (m *impl) GetPaymentStatusResponse() *PaymentStatusResponse {
+	return m.paymentStatusResponse
+}
+
 func (m *impl) InitiatePayment(paymentRequest string) {
 	m.initiatePayment = &InitiatePayment{
 		paymentRequest,
@@ -255,6 +282,13 @@ func (m *impl) PaymentResponse(commandId string, commandReply []byte, sessionId 
 		commandId,
 		commandReply,
 		sessionId,
+	}
+}
+
+func (m *impl) PaymentStatusResponse(sessionId string, status bool) {
+	m.paymentStatusResponse = &PaymentStatusResponse{
+		sessionId,
+		status,
 	}
 }
 
@@ -371,6 +405,15 @@ func (m * impl) ToPaymentProto(pbm *pb.Message) {
 			},
 		}
 	}
+
+	if m.paymentStatusResponse != nil {
+		pbm.PaymentMessage = &pb.Message_PaymentStatusResponse_{
+			PaymentStatusResponse: &pb.Message_PaymentStatusResponse{
+				SessionId: m.paymentStatusResponse.sessionId,
+				Status:    m.paymentStatusResponse.status,
+			},
+		}
+	}
 }
 func (m *impl) ToProtoV1() *pb.Message {
 	pbm := new(pb.Message)
@@ -437,5 +480,6 @@ func (m *impl) Loggable() map[string]interface{} {
 		"initiatePayment": m.initiatePayment,
 		"paymentCommand": m.paymentCommand,
 		"paymentResponse": m.paymentResponse,
+		"paymentStatusResponse": m.paymentStatusResponse,
 	}
 }
