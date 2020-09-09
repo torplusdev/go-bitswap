@@ -21,6 +21,11 @@ type PeerQueue interface {
 	ResponseReceived(ks []cid.Cid)
 	Startup()
 	Shutdown()
+
+	InitiatePayment(paymentRequest string)
+	PaymentCommand(commandId string, commandBody []byte, commandType int32, sessionId string)
+	PaymentResponse(commandId string, commandReply []byte, sessionId string)
+	PaymentStatusResponse(sessionId string, status bool)
 }
 
 type Session interface {
@@ -243,4 +248,28 @@ func (pm *PeerManager) signalAvailability(p peer.ID, isConnected bool) {
 			s.SignalAvailability(p, isConnected)
 		}
 	}
+}
+
+func (pm *PeerManager) InitiatePayment(target peer.ID, paymentRequest string) {
+	pqi := pm.getOrCreate(target)
+
+	pqi.InitiatePayment(paymentRequest)
+}
+
+func (pm *PeerManager) PaymentCommand(target peer.ID, commandId string, commandBody []byte, commandType int32, sessionId string) {
+	pqi := pm.getOrCreate(target)
+
+	pqi.PaymentCommand(commandId, commandBody, commandType, sessionId)
+}
+
+func (pm *PeerManager) PaymentResponse(target peer.ID, commandId string, commandReply []byte, sessionId string) {
+	pqi := pm.getOrCreate(target)
+
+	pqi.PaymentResponse(commandId, commandReply, sessionId)
+}
+
+func (pm *PeerManager) PaymentStatusResponse(target peer.ID, sessionId string, status bool) {
+	pqi := pm.getOrCreate(target)
+
+	pqi.PaymentStatusResponse(sessionId, status)
 }

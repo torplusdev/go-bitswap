@@ -76,6 +76,23 @@ type BitSwapMessage interface {
 
 	// Clone the message fields
 	Clone() BitSwapMessage
+
+	// Bitswap +
+	InitiatePayment(paymentRequest string)
+
+	PaymentCommand(commandId string, commandBody []byte, commandType int32, sessionId string)
+
+	PaymentResponse(commandId string, commandReply []byte, sessionId string)
+
+	PaymentStatusResponse(sessionId string, status bool)
+
+	GetInitiatePayment() *InitiatePayment
+
+	GetPaymentCommand() *PaymentCommand
+
+	GetPaymentResponse() *PaymentResponse
+
+	GetPaymentStatusResponse() *PaymentStatusResponse
 }
 
 // Exportable is an interface for structures than can be
@@ -147,6 +164,72 @@ type impl struct {
 	blocks         map[cid.Cid]blocks.Block
 	blockPresences map[cid.Cid]pb.Message_BlockPresenceType
 	pendingBytes   int32
+	initiatePayment			*InitiatePayment
+	paymentCommand			*PaymentCommand
+	paymentResponse 		*PaymentResponse
+	paymentStatusResponse	*PaymentStatusResponse
+}
+
+type InitiatePayment struct {
+	paymentRequest		string
+}
+
+func (i *InitiatePayment) GetPaymentRequest() string {
+	return i.paymentRequest
+}
+
+type PaymentCommand struct {
+	commandId 	string
+	commandBody []byte
+	commandType int32
+	sessionId	string
+}
+
+func (i *PaymentCommand) GetCommandId() string {
+	return i.commandId
+}
+
+func (i *PaymentCommand) GetCommandBody() []byte {
+	return i.commandBody
+}
+
+func (i *PaymentCommand) GetCommandType() int32 {
+	return i.commandType
+}
+
+func (i *PaymentCommand) GetSessionId() string  {
+	return i.sessionId
+}
+
+type PaymentResponse struct {
+	commandId		string
+	commandReply 	[]byte
+	sessionId		string
+}
+
+func (i *PaymentResponse) GetCommandId() string {
+	return i.commandId
+}
+
+func (i *PaymentResponse) GetCommandReply() []byte {
+	return i.commandReply
+}
+
+func (i *PaymentResponse) GetSessionId() string {
+	return i.sessionId
+}
+
+type PaymentStatusResponse struct {
+	sessionId		string
+	status			bool
+}
+
+func (i *PaymentStatusResponse) GetSessionId() string {
+	return i.sessionId
+}
+
+func (i *PaymentStatusResponse) GetStatus() bool {
+	return i.status
 }
 
 // New returns a new, empty bitswap message
@@ -241,6 +324,36 @@ func newMessageFromProto(pbm pb.Message) (BitSwapMessage, error) {
 
 	m.pendingBytes = pbm.PendingBytes
 
+
+	// Bitswap +
+	if pbm.PaymentMessage != nil {
+		switch paymentMessage := pbm.PaymentMessage.(type) {
+		case *pb.Message_PaymentCommand_:
+			m.paymentCommand = &PaymentCommand{
+				commandId:   paymentMessage.PaymentCommand.CommandId,
+				commandBody: paymentMessage.PaymentCommand.CommandBody,
+				commandType: paymentMessage.PaymentCommand.CommandType,
+				sessionId:   paymentMessage.PaymentCommand.SessionId,
+			}
+		case *pb.Message_PaymentResponse_:
+			m.paymentResponse = &PaymentResponse{
+				commandId:    paymentMessage.PaymentResponse.CommandId,
+				commandReply: paymentMessage.PaymentResponse.CommandReply,
+				sessionId:    paymentMessage.PaymentResponse.SessionId,
+			}
+		case *pb.Message_PaymentStatusResponse_:
+			m.paymentStatusResponse = &PaymentStatusResponse{
+				sessionId: paymentMessage.PaymentStatusResponse.SessionId,
+				status:    paymentMessage.PaymentStatusResponse.Status,
+			}
+		case *pb.Message_InitiatePayment_:
+			m.initiatePayment = &InitiatePayment{
+				paymentRequest: paymentMessage.InitiatePayment.PaymentRequest,
+			}
+		}
+
+	}
+
 	return m, nil
 }
 
@@ -249,7 +362,7 @@ func (m *impl) Full() bool {
 }
 
 func (m *impl) Empty() bool {
-	return len(m.blocks) == 0 && len(m.wantlist) == 0 && len(m.blockPresences) == 0
+	return len(m.blocks) == 0 && len(m.wantlist) == 0 && len(m.blockPresences) == 0 && m.initiatePayment == nil && m.paymentCommand == nil && m.paymentResponse == nil && m.paymentStatusResponse == nil
 }
 
 func (m *impl) Wantlist() []Entry {
@@ -258,6 +371,52 @@ func (m *impl) Wantlist() []Entry {
 		out = append(out, *e)
 	}
 	return out
+}
+
+func (m *impl) GetInitiatePayment() *InitiatePayment {
+return m.initiatePayment
+}
+
+func (m *impl) GetPaymentCommand() *PaymentCommand {
+	return m.paymentCommand
+}
+
+func (m *impl) GetPaymentResponse() *PaymentResponse {
+	return m.paymentResponse
+}
+
+func (m *impl) GetPaymentStatusResponse() *PaymentStatusResponse {
+	return m.paymentStatusResponse
+}
+
+func (m *impl) InitiatePayment(paymentRequest string) {
+	m.initiatePayment = &InitiatePayment{
+		paymentRequest,
+	}
+}
+
+func (m *impl) PaymentCommand(commandId string, commandBody []byte, commandType int32, sessionId string) {
+	m.paymentCommand = &PaymentCommand{
+		commandId,
+		commandBody,
+		commandType,
+		sessionId,
+	}
+}
+
+func (m *impl) PaymentResponse(commandId string, commandReply []byte, sessionId string) {
+	m.paymentResponse = &PaymentResponse{
+		commandId,
+		commandReply,
+		sessionId,
+	}
+}
+
+func (m *impl) PaymentStatusResponse(sessionId string, status bool) {
+	m.paymentStatusResponse = &PaymentStatusResponse{
+		sessionId,
+		status,
+	}
 }
 
 func (m *impl) Blocks() []blocks.Block {
@@ -406,6 +565,7 @@ func FromMsgReader(r msgio.Reader) (BitSwapMessage, error) {
 		return nil, err
 	}
 
+
 	var pb pb.Message
 	err = pb.Unmarshal(msg)
 	r.ReleaseMsg(msg)
@@ -429,8 +589,53 @@ func (m *impl) ToProtoV0() *pb.Message {
 	for _, b := range blocks {
 		pbm.Blocks = append(pbm.Blocks, b.RawData())
 	}
+
+	// Bitswap +
+	m.ToPaymentProto(pbm)
+
 	return pbm
 }
+
+func (m * impl) ToPaymentProto(pbm *pb.Message) {
+	if m.initiatePayment != nil {
+		pbm.PaymentMessage = &pb.Message_InitiatePayment_{
+			InitiatePayment: &pb.Message_InitiatePayment{
+				PaymentRequest: m.initiatePayment.paymentRequest,
+			},
+		}
+	}
+
+	if m.paymentCommand != nil {
+		pbm.PaymentMessage = &pb.Message_PaymentCommand_{
+			PaymentCommand: &pb.Message_PaymentCommand{
+				CommandId:   m.paymentCommand.commandId,
+				CommandBody: m.paymentCommand.commandBody,
+				CommandType: m.paymentCommand.commandType,
+				SessionId:   m.paymentCommand.sessionId,
+			},
+		}
+	}
+
+	if m.paymentResponse != nil {
+		pbm.PaymentMessage = &pb.Message_PaymentResponse_{
+			PaymentResponse: &pb.Message_PaymentResponse{
+				CommandId:    m.paymentResponse.commandId,
+				CommandReply: m.paymentResponse.commandReply,
+				SessionId:    m.paymentResponse.sessionId,
+			},
+		}
+	}
+
+	if m.paymentStatusResponse != nil {
+		pbm.PaymentMessage = &pb.Message_PaymentStatusResponse_{
+			PaymentStatusResponse: &pb.Message_PaymentStatusResponse{
+				SessionId: m.paymentStatusResponse.sessionId,
+				Status:    m.paymentStatusResponse.status,
+			},
+		}
+	}
+}
+
 
 func (m *impl) ToProtoV1() *pb.Message {
 	pbm := new(pb.Message)
@@ -458,6 +663,9 @@ func (m *impl) ToProtoV1() *pb.Message {
 	}
 
 	pbm.PendingBytes = m.PendingBytes()
+
+	// Bitswap +
+	m.ToPaymentProto(pbm)
 
 	return pbm
 }
@@ -496,5 +704,9 @@ func (m *impl) Loggable() map[string]interface{} {
 	return map[string]interface{}{
 		"blocks": blocks,
 		"wants":  m.Wantlist(),
+		"initiatePayment": m.initiatePayment,
+		"paymentCommand": m.paymentCommand,
+		"paymentResponse": m.paymentResponse,
+		"paymentStatusResponse": m.paymentStatusResponse,
 	}
 }
