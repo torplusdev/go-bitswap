@@ -30,4 +30,10 @@ require (
 	go.uber.org/zap v1.16.0
 )
 
+replace github.com/libp2p/go-libp2p => ../go-libp2p
+
+replace github.com/libp2p/go-libp2p-core => ../go-libp2p-core
+
+replace paidpiper.com/go-libp2p-onion-transport => ../go-libp2p-onion-transport
+
 go 1.12
