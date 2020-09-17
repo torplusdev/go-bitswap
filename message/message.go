@@ -86,6 +86,8 @@ type BitSwapMessage interface {
 
 	PaymentStatusResponse(sessionId string, status bool)
 
+	HasPayment() bool
+
 	GetInitiatePayment() *InitiatePayment
 
 	GetPaymentCommand() *PaymentCommand
@@ -259,6 +261,10 @@ func (m *impl) Clone() BitSwapMessage {
 		msg.blockPresences[k] = m.blockPresences[k]
 	}
 	msg.pendingBytes = m.pendingBytes
+	msg.initiatePayment = m.initiatePayment
+	msg.paymentCommand = m.paymentCommand
+	msg.paymentResponse = m.paymentResponse
+	msg.paymentStatusResponse = m.paymentStatusResponse
 	return msg
 }
 
@@ -275,6 +281,10 @@ func (m *impl) Reset(full bool) {
 		delete(m.blockPresences, k)
 	}
 	m.pendingBytes = 0
+	m.initiatePayment = nil
+	m.paymentCommand = nil
+	m.paymentResponse = nil
+	m.paymentStatusResponse = nil
 }
 
 var errCidMissing = errors.New("missing cid")
@@ -371,6 +381,10 @@ func (m *impl) Wantlist() []Entry {
 		out = append(out, *e)
 	}
 	return out
+}
+
+func (m *impl) HasPayment() bool {
+	return m.initiatePayment != nil || m.paymentCommand != nil || m.paymentResponse != nil || m.paymentStatusResponse != nil
 }
 
 func (m *impl) GetInitiatePayment() *InitiatePayment {

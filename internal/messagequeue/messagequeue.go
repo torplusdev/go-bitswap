@@ -663,7 +663,13 @@ func (mq *MessageQueue) pendingWorkCount() int {
 	mq.wllock.Lock()
 	defer mq.wllock.Unlock()
 
-	return mq.bcstWants.pending.Len() + mq.peerWants.pending.Len() + mq.cancels.Len()
+	paymentLen := 0
+
+	if mq.msg.HasPayment() {
+		paymentLen += 1
+	}
+
+	return mq.bcstWants.pending.Len() + mq.peerWants.pending.Len() + mq.cancels.Len() + paymentLen
 }
 
 // Convert the lists of wants into a Bitswap message
