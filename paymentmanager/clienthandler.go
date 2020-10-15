@@ -128,8 +128,8 @@ func (pm *PPClient) ProcessPayment(paymentRequest string, nodeId string) {
 	request := &ProcessPaymentRequestModel {
 		CallbackUrl:      fmt.Sprintf("http://localhost:%d/api/command", pm.commandListenPort),
 		PaymentRequest:   paymentRequest,
-		NodeId: 			nodeId,
-		Route:			make([]string, 0), // TODO: remove to start chain payment
+		NodeId: 		  nodeId,
+		Route:			  nil, //make([]string, 0), // TODO: remove to start chain payment
 	}
 
 	jsonValue, err := json.Marshal(request)
