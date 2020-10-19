@@ -28,7 +28,7 @@ require (
 	github.com/libp2p/go-libp2p-testing v0.1.1
 	github.com/libp2p/go-msgio v0.0.4
 	github.com/multiformats/go-multiaddr v0.1.2
-	github.com/stellar/go v0.0.0-20191220224801-2b500951f171
+	github.com/stellar/go v0.0.0-20201019170232-24465e0cb5fb
 )
 
 replace github.com/ipfs/go-bitswap => ./
