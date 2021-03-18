@@ -24,7 +24,6 @@ import (
 	bsspm "github.com/ipfs/go-bitswap/internal/sessionpeermanager"
 	bsmsg "github.com/ipfs/go-bitswap/message"
 	bsnet "github.com/ipfs/go-bitswap/network"
-	bspaym "github.com/ipfs/go-bitswap/paymentmanager"
 
 	blocks "github.com/ipfs/go-block-format"
 	cid "github.com/ipfs/go-cid"
@@ -71,14 +70,6 @@ func ProvideEnabled(enabled bool) Option {
 		bs.provideEnabled = enabled
 	}
 }
-
-// Configures bitswap to use PPChannel
-func PPChannelConfig(commandListenPort int, channelUrl string) Option {
-	return func(bs *Bitswap) {
-		bs.paym.SetPPChannelSettings(commandListenPort, channelUrl)
-	}
-}
-
 
 // ProviderSearchDelay overwrites the global provider search delay
 func ProviderSearchDelay(newProvSearchDelay time.Duration) Option {
@@ -140,16 +131,15 @@ func New(parent context.Context, network bsnet.BitSwapNetwork,
 		// Simulate a message arriving with DONT_HAVEs
 		sm.ReceiveFrom(ctx, p, nil, nil, dontHaves)
 	}
-	peerQueueFactory := func(ctx context.Context, p peer.ID) bspm.PeerQueue {
-		return bsmq.New(ctx, p, network, onDontHaveTimeout)
+	peerQueueFactory := func(ctx context.Context, p peer.ID) bspm.PeerQueueWithPayment {
+		return bsmq.WithPayment(bsmq.New(ctx, p, network, onDontHaveTimeout))
 	}
-
 
 	sim := bssim.New()
 	bpm := bsbpm.New()
-	pm := bspm.New(ctx, peerQueueFactory, network.Self())
+	pm := bspm.NewPaymentPeerManager(ctx, peerQueueFactory, network.Self())
 	pqm := bspqm.New(ctx, network)
-	paym := bspaym.New(ctx, pm, network)
+	network = bsnet.WithPayment(ctx, network, pm)
 
 	sessionFactory := func(
 		sessctx context.Context,
@@ -183,7 +173,6 @@ func New(parent context.Context, network bsnet.BitSwapNetwork,
 		pqm:              pqm,
 		sm:               sm,
 		sim:              sim,
-		paym:			  paym,
 		notif:            notif,
 		counters:         new(counters),
 		dupMetric:        dupHist,
@@ -202,8 +191,6 @@ func New(parent context.Context, network bsnet.BitSwapNetwork,
 	bs.pqm.Startup()
 
 	network.SetDelegate(bs)
-
-	bs.paym.Startup()
 
 	// Start up bitswaps async worker routines
 	bs.startWorkers(ctx, px)
@@ -224,11 +211,7 @@ func New(parent context.Context, network bsnet.BitSwapNetwork,
 
 // Bitswap instances implement the bitswap protocol.
 type Bitswap struct {
-	pm *bspm.PeerManager
-
-
-	// payment manager
-	paym *bspaym.PaymentManager
+	pm *bspm.PaymentPeerManager
 
 	// the provider query manager manages requests to find providers
 	pqm *bspqm.ProviderQueryManager
@@ -432,9 +415,9 @@ func (bs *Bitswap) ReceiveMessage(ctx context.Context, p peer.ID, incoming bsmsg
 	// Should only track *useful* messages in ledger
 
 	iblocks := incoming.Blocks()
-	var bytes int = 0
+
 	if len(iblocks) > 0 {
-		bytes = bs.updateReceiveCounters(iblocks)
+		bs.updateReceiveCounters(iblocks)
 		for _, b := range iblocks {
 			log.Debugf("[recv] block; cid=%s, peer=%s", b.Cid(), p)
 		}
@@ -449,38 +432,12 @@ func (bs *Bitswap) ReceiveMessage(ctx context.Context, p peer.ID, incoming bsmsg
 			log.Warnf("ReceiveMessage recvBlockFrom error: %s", err)
 			return
 		}
-
-		bs.paym.RegisterReceivedBytes(ctx, p, bytes)
 	}
 
-	initiatePayment := incoming.GetInitiatePayment()
-
-	if initiatePayment != nil {
-		bs.paym.ProcessPaymentRequest(ctx, p, initiatePayment.GetPaymentRequest())
-	}
-
-	paymentCommand := incoming.GetPaymentCommand()
-
-	if paymentCommand != nil {
-		bs.paym.ProcessPaymentCommand(ctx, p, paymentCommand.GetCommandId(), paymentCommand.GetCommandBody(), paymentCommand.GetCommandType(), paymentCommand.GetSessionId())
-	}
-
-	paymentResponse := incoming.GetPaymentResponse()
-
-	if paymentResponse != nil {
-		bs.paym.ProcessPaymentResponse(ctx, p, paymentResponse.GetCommandId(), paymentResponse.GetCommandReply(), paymentResponse.GetSessionId())
-	}
-
-	paymentStatusResponse := incoming.GetPaymentStatusResponse()
-
-	if paymentStatusResponse != nil {
-		bs.paym.ProcessPaymentStatusResponse(ctx, p, paymentStatusResponse.GetSessionId(), paymentStatusResponse.GetStatus())
-	}
 }
 
-func (bs *Bitswap) updateReceiveCounters(blocks []blocks.Block) int {
+func (bs *Bitswap) updateReceiveCounters(blocks []blocks.Block) {
 
-	bytes:= 0
 	// Check which blocks are in the datastore
 	// (Note: any errors from the blockstore are simply logged out in
 	// blockstoreHas())
@@ -504,15 +461,11 @@ func (bs *Bitswap) updateReceiveCounters(blocks []blocks.Block) int {
 		c.blocksRecvd++
 		c.dataRecvd += uint64(blkLen)
 
-		bytes += blkLen
-
 		if has {
 			c.dupBlocksRecvd++
 			c.dupDataRecvd += uint64(blkLen)
 		}
 	}
-
-	return bytes
 }
 
 func (bs *Bitswap) blockstoreHas(blks []blocks.Block) []bool {

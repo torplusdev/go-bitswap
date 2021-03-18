@@ -133,7 +133,6 @@ func (bs *Bitswap) sendBlocks(ctx context.Context, env *engine.Envelope) {
 	bs.sentHistogram.Observe(float64(env.Message.Size()))
 	log.Debugw("sent message", "peer", env.Peer)
 
-	bs.paym.RequirePayment(ctx, env.Peer, dataSent)
 }
 
 func (bs *Bitswap) provideWorker(px process.Process) {

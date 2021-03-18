@@ -664,8 +664,7 @@ func (mq *MessageQueue) pendingWorkCount() int {
 	defer mq.wllock.Unlock()
 
 	paymentLen := 0
-
-	if mq.msg.HasPayment() {
+	if mq.msg.(bsmsg.PaymentBitSwapMessage).HasPayment() { //TODO
 		paymentLen += 1
 	}
 
@@ -830,94 +829,4 @@ func (mq *MessageQueue) initializeSender() (bsnet.MessageSender, error) {
 		mq.sender = nsender
 	}
 	return mq.sender, nil
-}
-
-func (mq *MessageQueue) InitiatePayment(paymentRequest string) {
-	if !mq.initiatePayment(paymentRequest) {
-		return
-	}
-
-	select {
-
-	case mq.outgoingWork <- time.Now():
-
-	default:
-	}
-}
-
-func (mq *MessageQueue) PaymentCommand(commandId string, commandBody []byte, commandType int32, sessionId string) {
-	if !mq.paymentCommand(commandId, commandBody, commandType, sessionId) {
-		return
-	}
-
-	select {
-
-	case mq.outgoingWork <- time.Now():
-
-	default:
-	}
-}
-
-func (mq *MessageQueue) PaymentResponse(commandId string, commandReply []byte, sessionId string) {
-	if !mq.paymentResponse(commandId, commandReply, sessionId) {
-		return
-	}
-
-	select {
-
-	case mq.outgoingWork <- time.Now():
-
-	default:
-	}
-}
-
-func (mq *MessageQueue) PaymentStatusResponse(sessionId string, status bool) {
-
-	if !mq.paymentStatusResponse(sessionId, status) {
-		return
-	}
-
-	select {
-
-	case mq.outgoingWork <- time.Now():
-
-	default:
-	}
-}
-
-func (mq *MessageQueue) initiatePayment(paymentRequest string) bool {
-	//mq.nextMessageLk.Lock()
-	//defer mq.nextMessageLk.Unlock()
-
-	// if we have no message held allocate a new one
-	mq.msg.InitiatePayment(paymentRequest)
-
-	return true
-}
-
-func (mq *MessageQueue) paymentCommand(commandId string, commandBody []byte, commandType int32, sessionId string) bool {
-	//mq.nextMessageLk.Lock()
-	//defer mq.nextMessageLk.Unlock()
-
-	mq.msg.PaymentCommand(commandId, commandBody, commandType, sessionId)
-
-	return true
-}
-
-func (mq *MessageQueue) paymentResponse(commandId string, commandReply []byte, sessionId string) bool {
-	//mq.nextMessageLk.Lock()
-	//defer mq.nextMessageLk.Unlock()
-
-	mq.msg.PaymentResponse(commandId, commandReply, sessionId)
-
-	return true
-}
-
-func (mq *MessageQueue) paymentStatusResponse(sessionId string, status bool) bool {
-	//mq.nextMessageLk.Lock()
-	//defer mq.nextMessageLk.Unlock()
-
-	mq.msg.PaymentStatusResponse(sessionId, status)
-
-	return true
 }
