@@ -1,5 +1,6 @@
 module github.com/ipfs/go-bitswap
 
+
 require (
 	github.com/cskr/pubsub v1.0.2
 	github.com/gogo/protobuf v1.3.1
@@ -36,5 +37,7 @@ replace github.com/libp2p/go-libp2p => ../go-libp2p
 replace github.com/libp2p/go-libp2p-core => ../go-libp2p-core
 
 replace paidpiper.com/go-libp2p-onion-transport => ../go-libp2p-onion-transport
+
+replace paidpiper.com/payment-gateway => ../PaymentServices/PaymentGateway
 
 go 1.12
