@@ -84,7 +84,6 @@ func PPChannelConfig(commandListenPort int, channelUrl string) Option {
 	}
 }
 
-
 // ProviderSearchDelay overwrites the global provider search delay
 func ProviderSearchDelay(newProvSearchDelay time.Duration) Option {
 	return func(bs *Bitswap) {
@@ -167,7 +166,6 @@ func New(parent context.Context, network bsnet.BitSwapNetwork,
 		return bsmq.New(ctx, p, network, onDontHaveTimeout)
 	}
 
-
 	sim := bssim.New()
 	bpm := bsbpm.New()
 	pm := bspm.New(ctx, peerQueueFactory, network.Self())
@@ -195,14 +193,13 @@ func New(parent context.Context, network bsnet.BitSwapNetwork,
 	sm = bssm.New(ctx, sessionFactory, sim, sessionPeerManagerFactory, bpm, pm, notif, network.Self())
 
 	bs := &Bitswap{
-		blockstore:       bstore,
-		network:          network,
-		process:          px,
-		newBlocks:        make(chan cid.Cid, HasBlockBufferSize),
-		provideKeys:      make(chan cid.Cid, provideKeysBufferSize),
-		pm:               pm,
-		pqm:              pqm,
-<<<<<<< HEAD
+		blockstore:              bstore,
+		network:                 network,
+		process:                 px,
+		newBlocks:               make(chan cid.Cid, HasBlockBufferSize),
+		provideKeys:             make(chan cid.Cid, provideKeysBufferSize),
+		pm:                      pm,
+		pqm:                     pqm,
 		sm:                      sm,
 		sim:                     sim,
 		notif:                   notif,
@@ -214,19 +211,7 @@ func New(parent context.Context, network bsnet.BitSwapNetwork,
 		provSearchDelay:         defaultProvSearchDelay,
 		rebroadcastDelay:        delay.Fixed(time.Minute),
 		engineBstoreWorkerCount: defaulEngineBlockstoreWorkerCount,
-=======
-		sm:               sm,
-		sim:              sim,
-		paym:			  paym,
-		notif:            notif,
-		counters:         new(counters),
-		dupMetric:        dupHist,
-		allMetric:        allHist,
-		sentHistogram:    sentHistogram,
-		provideEnabled:   true,
-		provSearchDelay:  defaultProvSearchDelay,
-		rebroadcastDelay: delay.Fixed(time.Minute),
->>>>>>> Merge
+		paym:                    paym,
 	}
 
 	// apply functional options before starting and running bitswap
@@ -263,7 +248,6 @@ func New(parent context.Context, network bsnet.BitSwapNetwork,
 // Bitswap instances implement the bitswap protocol.
 type Bitswap struct {
 	pm *bspm.PeerManager
-
 
 	// payment manager
 	paym *bspaym.PaymentManager
@@ -531,7 +515,7 @@ func (bs *Bitswap) ReceiveMessage(ctx context.Context, p peer.ID, incoming bsmsg
 
 func (bs *Bitswap) updateReceiveCounters(blocks []blocks.Block) int {
 
-	bytes:= 0
+	bytes := 0
 	// Check which blocks are in the datastore
 	// (Note: any errors from the blockstore are simply logged out in
 	// blockstoreHas())
