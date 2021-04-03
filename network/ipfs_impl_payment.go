@@ -2,11 +2,9 @@ package network
 
 import (
 	"context"
-	"sync/atomic"
 
 	bsmsg "github.com/ipfs/go-bitswap/message"
-	"github.com/ipfs/go-bitswap/speedcontrol"
-	"github.com/libp2p/go-libp2p-core/helpers"
+	"github.com/ipfs/go-bitswap/pptools/speedcontrol"
 	"github.com/libp2p/go-libp2p-core/host"
 	"github.com/libp2p/go-libp2p-core/network"
 	"github.com/libp2p/go-libp2p-core/peer"
@@ -16,9 +14,14 @@ import (
 type implWithPay struct {
 	impl
 	speedController *speedcontrol.MultiSpeedDetector
+	payOption       PPOption
+}
+type PPOption struct {
+	CommandListenPort int
+	ChannelUrl        string
 }
 
-func NewPaymentFromIpfsHost(host host.Host, r routing.ContentRouting, opts ...NetOpt) BitSwapNetwork {
+func NewPaymentFromIpfsHost(host host.Host, r routing.ContentRouting, payOption PPOption, opts ...NetOpt) BitSwapNetwork {
 	bitswapNetwork := NewFromIpfsHost(host, r, opts...)
 	implNetwork, ok := bitswapNetwork.(*impl)
 	if ok {
@@ -31,7 +34,7 @@ func NewPaymentFromIpfsHost(host host.Host, r routing.ContentRouting, opts ...Ne
 }
 
 func (bsnet *implWithPay) newPaymentStreamToPeer(ctx context.Context, id peer.ID) (network.Stream, error) {
-	stream, err := bsnet.newPaymentStreamToPeer(ctx, id)
+	stream, err := bsnet.newStreamToPeer(ctx, id)
 	if err != nil {
 		return nil, err
 	}
@@ -52,11 +55,6 @@ func (bsnet *implWithPay) SendMessage(
 		_ = s.Reset()
 		return err
 	}
-	atomic.AddUint64(&bsnet.stats.MessagesSent, 1)
 
-	// TODO(https://github.com/libp2p/go-libp2p-net/issues/28): Avoid this goroutine.
-	//nolint
-	helpers.MultistreamSemverMatcher()
-	go helpers.AwaitEOF(s)
 	return s.Close()
 }

@@ -128,13 +128,13 @@ func (m *implWithPayment) ToPaymentProto(pbm *pb.Message) {
 
 }
 func (m *implWithPayment) ToProtoV0() *pb.Message {
-	pbm := m.ToProtoV0()
+	pbm := m.impl.ToProtoV0()
 	// Bitswap +
 	m.ToPaymentProto(pbm)
 	return pbm
 }
 func (m *implWithPayment) ToProtoV1() *pb.Message {
-	pbm := m.ToProtoV1()
+	pbm := m.impl.ToProtoV1()
 	// Bitswap +
 	m.ToPaymentProto(pbm)
 	return pbm

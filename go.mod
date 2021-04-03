@@ -1,11 +1,11 @@
 module github.com/ipfs/go-bitswap
 
-
 require (
 	github.com/cskr/pubsub v1.0.2
+	github.com/fujiwara/shapeio v1.0.0
 	github.com/gogo/protobuf v1.3.1
 	github.com/google/uuid v1.1.2
-	github.com/gorilla/mux v1.8.0
+	github.com/gorilla/mux v1.8.0 // indirect
 	github.com/ipfs/go-block-format v0.0.2
 	github.com/ipfs/go-cid v0.0.7
 	github.com/ipfs/go-datastore v0.4.5
@@ -30,6 +30,7 @@ require (
 	github.com/multiformats/go-multiaddr v0.3.1
 	github.com/multiformats/go-multistream v0.2.0
 	go.uber.org/zap v1.16.0
+	paidpiper.com/payment-gateway v0.0.0-00010101000000-000000000000
 )
 
 replace github.com/libp2p/go-libp2p => ../go-libp2p
@@ -38,6 +39,6 @@ replace github.com/libp2p/go-libp2p-core => ../go-libp2p-core
 
 replace paidpiper.com/go-libp2p-onion-transport => ../go-libp2p-onion-transport
 
-replace paidpiper.com/payment-gateway => ../PaymentServices/PaymentGateway
+replace paidpiper.com/payment-gateway => ../go-payment-service/PaymentGateway
 
 go 1.12

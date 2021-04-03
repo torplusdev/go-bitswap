@@ -6,33 +6,30 @@ import (
 	bsmsg "github.com/ipfs/go-bitswap/message"
 
 	"github.com/libp2p/go-libp2p-core/peer"
+	paymmodel "paidpiper.com/payment-gateway/models"
 	bspaym "paidpiper.com/payment-gateway/paymentmanager"
 )
 
-type PaynetOption func(*paymentNetwork)
+// type PaynetOption func(*paymentNetwork)
 
-//Configures bitswap to use PPChannel
-func PPChannelConfig(commandListenPort int, channelUrl string) PaynetOption {
-	return func(bs *paymentNetwork) {
-		bs.paym.SetHttpConnection(commandListenPort, channelUrl)
-	}
-}
+// //Configures bitswap to use PPChannel
+// func PPChannelConfig(commandListenPort int, channelUrl string) PaynetOption {
+// 	return func(bs *paymentNetwork) {
+// 		bs.paym.SetHttpConnection(commandListenPort, channelUrl)
+// 	}
+// }
 
 type PeerManager interface {
 	SendPaymentDataMessage(id peer.ID, data bspaym.PaymentData)
 }
 
-func WithPayment(ctx context.Context, network BitSwapNetwork, pm PeerManager, opts ...PaynetOption) BitSwapNetwork {
+func WithPayment(ctx context.Context, network BitSwapNetwork, pm PeerManager) BitSwapNetwork {
 
 	pNet := &paymentNetwork{
 		BitSwapNetwork: network,
-
-		pm: pm,
+		pm:             pm,
 	}
 	pNet.paym = bspaym.New(ctx, pNet)
-	for _, opt := range opts {
-		opt(pNet)
-	}
 	return pNet
 }
 
@@ -43,7 +40,7 @@ type paymentNetwork struct {
 	pm       PeerManager
 }
 
-func (pm *paymentNetwork) SendPaymentDataMessage(id bspaym.PeerID, data bspaym.PaymentData) {
+func (pm *paymentNetwork) SendPaymentDataMessage(id paymmodel.PeerID, data bspaym.PaymentData) {
 	peerID, err := peer.IDHexDecode(string(id))
 	if err != nil {
 		log.Fatal("Peer id id no valid")
@@ -60,7 +57,7 @@ func (pm *paymentNetwork) SendMessage(
 
 	err := pm.BitSwapNetwork.SendMessage(ctx, id, msg)
 	peerID := peer.IDHexEncode(id)
-	pm.paym.RegisterReceivedBytes(ctx, bspaym.PeerID(peerID), calculateSize(msg))
+	pm.paym.RequirePayment(ctx, paymmodel.PeerID(peerID), calculateSize(msg))
 	return err
 }
 
@@ -77,7 +74,7 @@ func (pm *paymentNetwork) ReceiveMessage(ctx context.Context, p peer.ID, incomin
 	pm.receiver.ReceiveMessage(ctx, p, incoming)
 	bytesCount := calculateSize(incoming)
 	peerID := peer.IDHexEncode(p)
-	pm.paym.RegisterReceivedBytes(ctx, bspaym.PeerID(peerID), bytesCount)
+	pm.paym.RegisterReceivedBytes(ctx, paymmodel.PeerID(peerID), bytesCount)
 	incomPayMsg, ok := incoming.(bsmsg.PaymentBitSwapMessage)
 	if !ok {
 		return
@@ -85,7 +82,7 @@ func (pm *paymentNetwork) ReceiveMessage(ctx context.Context, p peer.ID, incomin
 	paymentData := incomPayMsg.GetPaymentData()
 	if paymentData != nil {
 
-		pm.paym.ReceivePaymentDataMessage(ctx, bspaym.PeerID(peerID), paymentData)
+		pm.paym.ReceivePaymentDataMessage(ctx, paymmodel.PeerID(peerID), paymentData)
 	}
 }
 

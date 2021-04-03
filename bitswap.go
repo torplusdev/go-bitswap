@@ -471,11 +471,9 @@ func (bs *Bitswap) ReceiveMessage(ctx context.Context, p peer.ID, incoming bsmsg
 			return
 		}
 	}
-
 }
 
 func (bs *Bitswap) updateReceiveCounters(blocks []blocks.Block) {
-
 	// Check which blocks are in the datastore
 	// (Note: any errors from the blockstore are simply logged out in
 	// blockstoreHas())
