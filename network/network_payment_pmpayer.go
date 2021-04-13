@@ -94,6 +94,7 @@ func (pm *paymentNetwork) ReceiveError(err error) {
 func (pm *paymentNetwork) PeerConnected(id peer.ID) {
 	pm.receiver.PeerConnected(id)
 }
+
 func (pm *paymentNetwork) PeerDisconnected(id peer.ID) {
 	pm.receiver.PeerDisconnected(id)
 }

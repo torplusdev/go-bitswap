@@ -34,6 +34,7 @@ func FromProto(pbm pb.IsMessage_PaymentMessage) paymentmanager.PaymentData {
 	}
 	return nil
 }
+
 func ToProto(pd paymentmanager.PaymentData) pb.IsMessage_PaymentMessage {
 	switch m := pd.(type) {
 	case *paymentmanager.InitiatePayment:
@@ -73,6 +74,7 @@ func ToProto(pd paymentmanager.PaymentData) pb.IsMessage_PaymentMessage {
 // BitSwapMessage is the basic interface for interacting building, encoding,
 // and decoding messages sent on the BitSwap protocol.
 type PaymentBitSwapMessage interface {
+	BitSwapMessage
 	SetPaymentData(data paymentmanager.PaymentData)
 	GetPaymentData() paymentmanager.PaymentData
 	HasPayment() bool
@@ -105,6 +107,7 @@ func (m *implWithPayment) Clone() BitSwapMessage {
 	}
 	return msg
 }
+
 func (m *implWithPayment) Reset(full bool) {
 	m.impl.Reset(full)
 }
@@ -115,30 +118,33 @@ func newMessageWithPaymentFromProto(pbm pb.Message) (BitSwapMessage, error) {
 
 	// Bitswap +
 	if pbm.PaymentMessage != nil {
-		m.paymentData = FromProto(pbm.PaymentMessage)
+		m.SetPaymentData(FromProto(pbm.PaymentMessage))
 	}
 
 	return m, nil
 }
+
 func (m *implWithPayment) ToPaymentProto(pbm *pb.Message) {
 	if m.paymentData != nil {
-
 		pbm.PaymentMessage = ToProto(m.paymentData)
 	}
 
 }
+
 func (m *implWithPayment) ToProtoV0() *pb.Message {
 	pbm := m.impl.ToProtoV0()
 	// Bitswap +
 	m.ToPaymentProto(pbm)
 	return pbm
 }
+
 func (m *implWithPayment) ToProtoV1() *pb.Message {
 	pbm := m.impl.ToProtoV1()
 	// Bitswap +
 	m.ToPaymentProto(pbm)
 	return pbm
 }
+
 func (m *implWithPayment) Loggable() map[string]interface{} {
 	blocks := make([]string, 0, len(m.blocks))
 	for _, v := range m.blocks {
@@ -150,7 +156,8 @@ func (m *implWithPayment) Loggable() map[string]interface{} {
 		"paymentData": m.paymentData,
 	}
 }
-func newMsgWithPayment(full bool) *implWithPayment {
+
+func newMsgWithPayment(full bool) PaymentBitSwapMessage {
 	return &implWithPayment{
 		impl:        *newMsg(full),
 		paymentData: nil,
@@ -162,6 +169,14 @@ func (m *implWithPayment) Empty() bool {
 		len(m.wantlist) == 0 &&
 		len(m.blockPresences) == 0 &&
 		m.paymentData == nil
+}
+
+func (m *implWithPayment) GetPaymentData() paymentmanager.PaymentData {
+	return m.paymentData
+}
+
+func (m *implWithPayment) SetPaymentData(pd paymentmanager.PaymentData) {
+	m.paymentData = pd
 }
 
 func (m *implWithPayment) HasPayment() bool {

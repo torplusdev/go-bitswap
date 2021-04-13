@@ -48,6 +48,7 @@ func (pm *PaymentPeerManager) getOrCreate(p peer.ID) PeerQueue {
 	}
 	return pq
 }
+
 func (pm *PaymentPeerManager) getOrCreateWithPayment(p peer.ID) PeerQueueWithPayment {
 	item, ok := pm.getOrCreate(p).(PeerQueueWithPayment)
 	if !ok {
