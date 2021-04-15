@@ -2,6 +2,8 @@ package message
 
 import (
 	pb "github.com/ipfs/go-bitswap/message/pb"
+	blocks "github.com/ipfs/go-block-format"
+	cid "github.com/ipfs/go-cid"
 	"paidpiper.com/payment-gateway/models"
 	"paidpiper.com/payment-gateway/paymentmanager"
 )
@@ -113,8 +115,50 @@ func (m *implWithPayment) Reset(full bool) {
 }
 
 // NOTE: should change in proro implementation original name newMessageFromProto
-func newMessageWithPaymentFromProto(pbm pb.Message) (BitSwapMessage, error) {
+func newMessageWithPaymentFromProto(pbm pb.Message) (PaymentBitSwapMessage, error) {
 	m := newMsgWithPayment(pbm.Wantlist.Full)
+	for _, e := range pbm.Wantlist.Entries {
+		if !e.Block.Cid.Defined() {
+			return nil, errCidMissing
+		}
+		m.addEntry(e.Block.Cid, e.Priority, e.Cancel, e.WantType, e.SendDontHave)
+	}
+
+	// deprecated
+	for _, d := range pbm.Blocks {
+		// CIDv0, sha256, protobuf only
+		b := blocks.NewBlock(d)
+		m.AddBlock(b)
+	}
+	//
+
+	for _, b := range pbm.GetPayload() {
+		pref, err := cid.PrefixFromBytes(b.GetPrefix())
+		if err != nil {
+			return nil, err
+		}
+
+		c, err := pref.Sum(b.GetData())
+		if err != nil {
+			return nil, err
+		}
+
+		blk, err := blocks.NewBlockWithCid(b.GetData(), c)
+		if err != nil {
+			return nil, err
+		}
+
+		m.AddBlock(blk)
+	}
+
+	for _, bi := range pbm.GetBlockPresences() {
+		if !bi.Cid.Cid.Defined() {
+			return nil, errCidMissing
+		}
+		m.AddBlockPresence(bi.Cid.Cid, bi.Type)
+	}
+
+	m.pendingBytes = pbm.PendingBytes
 
 	// Bitswap +
 	if pbm.PaymentMessage != nil {
@@ -157,7 +201,7 @@ func (m *implWithPayment) Loggable() map[string]interface{} {
 	}
 }
 
-func newMsgWithPayment(full bool) PaymentBitSwapMessage {
+func newMsgWithPayment(full bool) *implWithPayment {
 	return &implWithPayment{
 		impl:        *newMsg(full),
 		paymentData: nil,
