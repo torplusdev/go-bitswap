@@ -7,6 +7,11 @@ import (
 	"paidpiper.com/payment-gateway/paymentmanager"
 )
 
+func WithMessageCutoff(mq *MessageQueue, sendMessageCutoff int) *MessageQueue {
+	mq.sendMessageCutoff = sendMessageCutoff
+	return mq
+}
+
 func WithPayment(mq *MessageQueue) *MessageQueueWithPayment {
 	return &MessageQueueWithPayment{
 		MessageQueue: *mq,

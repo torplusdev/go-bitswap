@@ -36,8 +36,7 @@ const (
 	maxPriority = math.MaxInt32
 	// sendMessageDebounce is the debounce duration when calling sendMessage()
 	sendMessageDebounce = time.Millisecond
-	// when we reach sendMessageCutoff wants/cancels, we'll send the message immediately.
-	sendMessageCutoff = 256
+
 	// when we debounce for more than sendMessageMaxDelay, we'll send the
 	// message immediately.
 	sendMessageMaxDelay = 20 * time.Millisecond
@@ -97,6 +96,8 @@ type MessageQueue struct {
 	// For performance reasons we just clear out the fields of the message
 	// instead of creating a new one every time.
 	msg bsmsg.BitSwapMessage
+	// when we reach sendMessageCutoff wants/cancels, we'll send the message immediately.
+	sendMessageCutoff int
 }
 
 // recallWantlist keeps a list of pending wants and a list of sent wants
@@ -420,7 +421,7 @@ func (mq *MessageQueue) runQueue() {
 
 			// If we have too many updates and/or we've waited too
 			// long, send immediately.
-			if mq.pendingWorkCount() > sendMessageCutoff ||
+			if mq.pendingWorkCount() > mq.sendMessageCutoff ||
 				time.Since(workScheduled) >= sendMessageMaxDelay {
 				mq.sendIfReady()
 				workScheduled = time.Time{}

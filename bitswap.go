@@ -155,7 +155,10 @@ func New(parent context.Context, network bsnet.BitSwapNetwork,
 		sm.ReceiveFrom(ctx, p, nil, nil, dontHaves)
 	}
 	peerQueueFactory := func(ctx context.Context, p peer.ID) bspm.PeerQueueWithPayment {
-		return bsmq.WithPayment(bsmq.New(ctx, p, network, onDontHaveTimeout))
+		mq := bsmq.New(ctx, p, network, onDontHaveTimeout)
+		mq = bsmq.WithPayment(mq)
+		mq = bsmq.WithMessageCutoff(mq, 256)
+		return mq
 	}
 
 	sim := bssim.New()
