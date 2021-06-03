@@ -23,21 +23,26 @@ type PeerManager interface {
 	SendPaymentDataMessage(id peer.ID, data bspaym.PaymentData)
 }
 
+type paymentNetwork struct {
+	BitSwapNetwork
+	receiver Receiver
+	paym     bspaym.PaymentManager
+	pm       PeerManager
+}
+
 func WithPayment(ctx context.Context, network BitSwapNetwork, pm PeerManager) BitSwapNetwork {
 
 	pNet := &paymentNetwork{
 		BitSwapNetwork: network,
 		pm:             pm,
 	}
-	pNet.paym = bspaym.New(ctx, pNet)
-	return pNet
-}
 
-type paymentNetwork struct {
-	BitSwapNetwork
-	receiver Receiver
-	paym     bspaym.PaymentManager
-	pm       PeerManager
+	if n, ok := network.(*implWithPay); ok {
+		paym := bspaym.New(ctx, pNet)
+		paym.SetHttpConnection(n.payOption.CommandListenPort, n.payOption.ChannelUrl)
+		pNet.paym = paym
+	}
+	return pNet
 }
 
 func (pm *paymentNetwork) SendPaymentDataMessage(id paymmodel.PeerID, data bspaym.PaymentData) {

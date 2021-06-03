@@ -28,6 +28,7 @@ func NewPaymentFromIpfsHost(host host.Host, r routing.ContentRouting, payOption 
 		return &implWithPay{
 			impl:            *implNetwork,
 			speedController: speedcontrol.NewSpeedDetector(),
+			payOption:       payOption,
 		}
 	}
 	panic("not valid implementation")
