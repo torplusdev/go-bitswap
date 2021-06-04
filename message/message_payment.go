@@ -1,6 +1,9 @@
 package message
 
 import (
+	"fmt"
+	"time"
+
 	pb "github.com/ipfs/go-bitswap/message/pb"
 	blocks "github.com/ipfs/go-block-format"
 	cid "github.com/ipfs/go-cid"
@@ -80,6 +83,7 @@ type PaymentBitSwapMessage interface {
 	SetPaymentData(data paymentmanager.PaymentData)
 	GetPaymentData() paymentmanager.PaymentData
 	HasPayment() bool
+	String() string
 }
 
 type implWithPayment struct {
@@ -93,7 +97,26 @@ func WithPayment(m *impl) BitSwapMessage {
 		paymentData: nil,
 	}
 }
+func (m *implWithPayment) String() string {
+	pmflag := 0
+	if m.paymentData != nil {
+		pmflag = 1
+	}
+	return fmt.Sprintf("%s w %d b %d bp %d pb %d pd %d", time.Now().String(), len(m.impl.wantlist), calculateSize(m), len(m.impl.blockPresences), m.impl.pendingBytes, pmflag)
+}
 
+func calculateSize(incoming *implWithPayment) int {
+	blocks := incoming.Blocks()
+	var bytes int = 0
+	if len(blocks) > 0 {
+		// Do some accounting for each block
+		for _, b := range blocks {
+			blkLen := len(b.RawData())
+			bytes += blkLen
+		}
+	}
+	return bytes
+}
 func (m *implWithPayment) Clone() BitSwapMessage {
 	implClonse, ok := m.impl.Clone().(*impl)
 	if !ok {

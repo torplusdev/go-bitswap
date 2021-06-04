@@ -441,7 +441,9 @@ func (bs *Bitswap) ReceiveMessage(ctx context.Context, p peer.ID, incoming bsmsg
 	bs.counterLk.Lock()
 	bs.counters.messagesRecvd++
 	bs.counterLk.Unlock()
-
+	if s, ok := incoming.(bsmsg.PaymentBitSwapMessage); ok {
+		fmt.Println("Receive ", s.String())
+	}
 	// This call records changes to wantlists, blocks received,
 	// and number of bytes transfered.
 	bs.engine.MessageReceived(ctx, p, incoming)

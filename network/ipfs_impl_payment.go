@@ -2,6 +2,7 @@ package network
 
 import (
 	"context"
+	"fmt"
 
 	bsmsg "github.com/ipfs/go-bitswap/message"
 	"github.com/ipfs/go-bitswap/pptools/speedcontrol"
@@ -46,9 +47,12 @@ func (bsnet *implWithPay) SendMessage(
 	ctx context.Context,
 	p peer.ID,
 	outgoing bsmsg.BitSwapMessage) error {
-
+	if s, ok := outgoing.(bsmsg.PaymentBitSwapMessage); ok {
+		fmt.Println("Send ", s.String())
+	}
 	s, err := bsnet.newPaymentStreamToPeer(ctx, p)
 	if err != nil {
+		fmt.Print("Stream not found")
 		return err
 	}
 
