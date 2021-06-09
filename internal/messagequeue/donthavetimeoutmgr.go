@@ -15,7 +15,7 @@ const (
 	// or when the peer takes too long to respond.
 	// If the peer doesn't respond to a want-block within the timeout, the
 	// local node assumes that the peer doesn't have the block.
-	dontHaveTimeout = 5 * time.Second
+	dontHaveTimeout = 15 * time.Second
 
 	// maxExpectedWantProcessTime is the maximum amount of time we expect a
 	// peer takes to process a want and initiate sending a response to us

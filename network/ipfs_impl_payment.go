@@ -52,7 +52,7 @@ func (bsnet *implWithPay) SendMessage(
 	}
 	s, err := bsnet.newPaymentStreamToPeer(ctx, p)
 	if err != nil {
-		fmt.Print("Stream not found")
+		fmt.Println("Stream not found")
 		return err
 	}
 
