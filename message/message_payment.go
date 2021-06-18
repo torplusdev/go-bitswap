@@ -1,6 +1,7 @@
 package message
 
 import (
+	"encoding/json"
 	"fmt"
 	"time"
 
@@ -14,8 +15,14 @@ import (
 func FromProto(pbm pb.IsMessage_PaymentMessage) paymentmanager.PaymentData {
 	switch v := pbm.(type) {
 	case *pb.Message_InitiatePayment_:
+		pr := &models.PaymentRequest{}
+		err := json.Unmarshal([]byte(v.InitiatePayment.PaymentRequest), pr)
+		if err != nil {
+			//TODO ERROR
+			panic("marshal error")
+		}
 		return &paymentmanager.InitiatePayment{
-			PaymentRequest: v.InitiatePayment.PaymentRequest,
+			PaymentRequest: pr,
 		}
 	case *pb.Message_PaymentCommand_:
 		return &paymentmanager.PaymentCommand{
@@ -43,9 +50,14 @@ func FromProto(pbm pb.IsMessage_PaymentMessage) paymentmanager.PaymentData {
 func ToProto(pd paymentmanager.PaymentData) pb.IsMessage_PaymentMessage {
 	switch m := pd.(type) {
 	case *paymentmanager.InitiatePayment:
+		bs, err := json.Marshal(m.PaymentRequest)
+		if err != nil {
+			//TODO
+			panic("Marshal error")
+		}
 		return &pb.Message_InitiatePayment_{
 			InitiatePayment: &pb.Message_InitiatePayment{
-				PaymentRequest: m.PaymentRequest,
+				PaymentRequest: string(bs),
 			},
 		}
 	case *paymentmanager.PaymentCommand:
@@ -102,7 +114,7 @@ func (m *implWithPayment) String() string {
 	if m.paymentData != nil {
 		pmflag = 1
 	}
-	return fmt.Sprintf("%s w %d b %d bp %d pb %d pd %d", time.Now().String(), len(m.impl.wantlist), calculateSize(m), len(m.impl.blockPresences), m.impl.pendingBytes, pmflag)
+	return fmt.Sprintf("%s %v w %d b %d bp %d pb %d pd %d", time.Now().String(), m.impl.full, len(m.impl.wantlist), calculateSize(m), len(m.impl.blockPresences), m.impl.pendingBytes, pmflag)
 }
 
 func calculateSize(incoming *implWithPayment) int {
