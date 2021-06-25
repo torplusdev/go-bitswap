@@ -62,7 +62,10 @@ func (pm *paymentNetwork) SendMessage(
 
 	err := pm.BitSwapNetwork.SendMessage(ctx, id, msg)
 	peerID := peer.IDHexEncode(id)
-	pm.paym.RequirePayment(ctx, paymmodel.PeerID(peerID), calculateSize(msg))
+	size := calculateSize(msg)
+	if size > 0 {
+		pm.paym.RequirePayment(ctx, paymmodel.PeerID(peerID), size)
+	}
 	return err
 }
 

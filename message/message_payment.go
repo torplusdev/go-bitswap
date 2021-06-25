@@ -3,6 +3,7 @@ package message
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"time"
 
 	pb "github.com/ipfs/go-bitswap/message/pb"
@@ -197,7 +198,11 @@ func newMessageWithPaymentFromProto(pbm pb.Message) (PaymentBitSwapMessage, erro
 
 	// Bitswap +
 	if pbm.PaymentMessage != nil {
-		m.SetPaymentData(FromProto(pbm.PaymentMessage))
+		paymentDataProto := FromProto(pbm.PaymentMessage)
+		if paymentDataProto == nil {
+			fmt.Println("Error: paymentDataProto from proto is null")
+		}
+		m.SetPaymentData(paymentDataProto)
 	}
 
 	return m, nil
@@ -206,8 +211,18 @@ func newMessageWithPaymentFromProto(pbm pb.Message) (PaymentBitSwapMessage, erro
 func (m *implWithPayment) ToPaymentProto(pbm *pb.Message) {
 	if m.paymentData != nil {
 		pbm.PaymentMessage = ToProto(m.paymentData)
+		if pbm.PaymentMessage == nil {
+			fmt.Println("Error: paymentDataProto to proto is null")
+		}
 	}
 
+}
+func (m *implWithPayment) ToNetV0(w io.Writer) error {
+	return write(w, m.ToProtoV0())
+}
+
+func (m *implWithPayment) ToNetV1(w io.Writer) error {
+	return write(w, m.ToProtoV1())
 }
 
 func (m *implWithPayment) ToProtoV0() *pb.Message {

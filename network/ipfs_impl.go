@@ -245,23 +245,42 @@ func (bsnet *impl) msgToStream(ctx context.Context, s network.Stream, msg bsmsg.
 	if err := s.SetWriteDeadline(deadline); err != nil {
 		log.Warnf("error setting deadline: %s", err)
 	}
-
-	// Older Bitswap versions use a slightly different wire format so we need
-	// to convert the message to the appropriate format depending on the remote
-	// peer's Bitswap version.
-	switch s.Protocol() {
-	case bsnet.protocolBitswapOneOne, bsnet.protocolBitswap:
-		if err := msg.ToNetV1(s); err != nil {
-			log.Debugf("error: %s", err)
-			return err
+	if msg, ok := msg.(bsmsg.PaymentBitSwapMessage); ok {
+		// Older Bitswap versions use a slightly different wire format so we need
+		// to convert the message to the appropriate format depending on the remote
+		// peer's Bitswap version.
+		switch s.Protocol() {
+		case bsnet.protocolBitswapOneOne, bsnet.protocolBitswap:
+			if err := msg.ToNetV1(s); err != nil {
+				log.Debugf("error: %s", err)
+				return err
+			}
+		case bsnet.protocolBitswapOneZero, bsnet.protocolBitswapNoVers:
+			if err := msg.ToNetV0(s); err != nil {
+				log.Debugf("error: %s", err)
+				return err
+			}
+		default:
+			return fmt.Errorf("unrecognized protocol on remote: %s", s.Protocol())
 		}
-	case bsnet.protocolBitswapOneZero, bsnet.protocolBitswapNoVers:
-		if err := msg.ToNetV0(s); err != nil {
-			log.Debugf("error: %s", err)
-			return err
+	} else {
+		// Older Bitswap versions use a slightly different wire format so we need
+		// to convert the message to the appropriate format depending on the remote
+		// peer's Bitswap version.
+		switch s.Protocol() {
+		case bsnet.protocolBitswapOneOne, bsnet.protocolBitswap:
+			if err := msg.ToNetV1(s); err != nil {
+				log.Debugf("error: %s", err)
+				return err
+			}
+		case bsnet.protocolBitswapOneZero, bsnet.protocolBitswapNoVers:
+			if err := msg.ToNetV0(s); err != nil {
+				log.Debugf("error: %s", err)
+				return err
+			}
+		default:
+			return fmt.Errorf("unrecognized protocol on remote: %s", s.Protocol())
 		}
-	default:
-		return fmt.Errorf("unrecognized protocol on remote: %s", s.Protocol())
 	}
 
 	atomic.AddUint64(&bsnet.stats.MessagesSent, 1)
