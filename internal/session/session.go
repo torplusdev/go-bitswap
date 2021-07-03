@@ -244,6 +244,8 @@ func (s *Session) GetBlocks(ctx context.Context, keys []cid.Cid) (<-chan blocks.
 			case s.incoming <- op{op: opWant, keys: keys}:
 			case <-ctx.Done():
 			case <-s.ctx.Done():
+				i := 5
+				_ = i
 			}
 		},
 		func(keys []cid.Cid) {

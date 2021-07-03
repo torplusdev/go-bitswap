@@ -73,6 +73,19 @@ func AsyncGetBlocks(ctx context.Context, sessctx context.Context, keys []cid.Cid
 		return out, nil
 	}
 
+	if streamingScope, ok := ctx.Value("streamingScope").(*int); ok {
+
+		// streadmingScope might be used later
+		_ = streamingScope
+
+		// Register a handler for connection abort
+		go func() {
+			<-sessctx.Done()
+			log.Infof("Connection has been closed, need to clean up requests")
+			cwants(keys)
+		}()
+	}
+
 	// Use a PubSub notifier to listen for incoming blocks for each key
 	remaining := cid.NewSet()
 	promise := notif.Subscribe(ctx, keys...)
@@ -102,6 +115,10 @@ func handleIncoming(ctx context.Context, sessctx context.Context, remaining *cid
 	defer func() {
 		cancel()
 		close(out)
+		if len(remaining.Keys()) > 0 {
+			i := 3
+			_ = i
+		}
 		// can't just defer this call on its own, arguments are resolved *when* the defer is created
 		cfun(remaining.Keys())
 	}()
