@@ -73,18 +73,15 @@ func AsyncGetBlocks(ctx context.Context, sessctx context.Context, keys []cid.Cid
 		return out, nil
 	}
 
-	if streamingScope, ok := ctx.Value("streamingScope").(*int); ok {
+	// A child context is being created, so this won't work
+	//if streamingScope, ok := ctx.Value("streamingScope").(*int); ok {
 
-		// streadmingScope might be used later
-		_ = streamingScope
-
-		// Register a handler for connection abort
-		go func() {
-			<-sessctx.Done()
-			log.Infof("Connection has been closed, need to clean up requests")
-			cwants(keys)
-		}()
-	}
+	// Register a handler for connection abort
+	go func() {
+		<-sessctx.Done()
+		log.Infof("Connection has been closed, need to clean up requests")
+		cwants(keys)
+	}()
 
 	// Use a PubSub notifier to listen for incoming blocks for each key
 	remaining := cid.NewSet()
