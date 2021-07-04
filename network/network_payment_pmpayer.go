@@ -30,7 +30,7 @@ type paymentNetwork struct {
 	pm       PeerManager
 }
 
-func WithPayment(ctx context.Context, network BitSwapNetwork, pm PeerManager) BitSwapNetwork {
+func WithPayment(ctx context.Context, network BitSwapNetwork, pm PeerManager, server bspaym.CallbackServer) BitSwapNetwork {
 
 	pNet := &paymentNetwork{
 		BitSwapNetwork: network,
@@ -39,7 +39,9 @@ func WithPayment(ctx context.Context, network BitSwapNetwork, pm PeerManager) Bi
 
 	if n, ok := network.(*implWithPay); ok {
 		paym := bspaym.New(ctx, pNet)
-		paym.SetHttpConnection(n.payOption.CommandListenPort, n.payOption.ChannelUrl)
+		port := n.payOption.CommandListenPort
+		server.SetPort(port)
+		paym.SetHttpConnection(port, n.payOption.ChannelUrl, server)
 		pNet.paym = paym
 	}
 	return pNet

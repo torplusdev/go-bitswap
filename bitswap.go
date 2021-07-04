@@ -11,6 +11,7 @@ import (
 	"time"
 
 	delay "github.com/ipfs/go-ipfs-delay"
+	"paidpiper.com/payment-gateway/paymentmanager"
 
 	deciface "github.com/ipfs/go-bitswap/decision"
 	bsbpm "github.com/ipfs/go-bitswap/internal/blockpresencemanager"
@@ -162,7 +163,10 @@ func New(parent context.Context, network bsnet.BitSwapNetwork,
 	bpm := bsbpm.New()
 	pm := bspm.NewPaymentPeerManager(ctx, peerQueueFactory, network.Self())
 	pqm := bspqm.New(ctx, network)
-	network = bsnet.WithPayment(ctx, network, pm)
+
+	server := paymentmanager.NewServer()
+
+	network = bsnet.WithPayment(ctx, network, pm, server)
 
 	sessionFactory := func(
 		sessctx context.Context,
@@ -182,8 +186,9 @@ func New(parent context.Context, network bsnet.BitSwapNetwork,
 		return bsspm.New(id, network.ConnectionManager())
 	}
 	notif := notifications.New()
-	sm = bssm.New(ctx, sessionFactory, sim, sessionPeerManagerFactory, bpm, pm, notif, network.Self())
 
+	sm = bssm.New(ctx, sessionFactory, sim, sessionPeerManagerFactory, bpm, pm, notif, network.Self())
+	server.SetMetricsSource(sm)
 	bs := &Bitswap{
 		blockstore:              bstore,
 		network:                 network,

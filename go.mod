@@ -28,6 +28,7 @@ require (
 	github.com/libp2p/go-msgio v0.0.6
 	github.com/multiformats/go-multiaddr v0.3.1
 	github.com/multiformats/go-multistream v0.2.0
+	github.com/prometheus/client_golang v0.9.3-0.20190127221311-3c4408c8b829
 	go.uber.org/zap v1.16.0
 	paidpiper.com/payment-gateway v0.0.0-00010101000000-000000000000
 )
