@@ -147,6 +147,7 @@ func (m *implWithPayment) Clone() BitSwapMessage {
 }
 
 func (m *implWithPayment) Reset(full bool) {
+	m.paymentData = nil
 	m.impl.Reset(full)
 }
 
