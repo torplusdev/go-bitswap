@@ -447,7 +447,7 @@ func (bs *Bitswap) ReceiveMessage(ctx context.Context, p peer.ID, incoming bsmsg
 	bs.counters.messagesRecvd++
 	bs.counterLk.Unlock()
 	if s, ok := incoming.(bsmsg.PaymentBitSwapMessage); ok {
-		fmt.Println("Receive ", s.String())
+		//fmt.Println("Receive ", s.String())
 		if s.Empty() {
 			fmt.Println("Receive Empty")
 		}

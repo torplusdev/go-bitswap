@@ -48,7 +48,7 @@ func (bsnet *implWithPay) SendMessage(
 	p peer.ID,
 	outgoing bsmsg.BitSwapMessage) error {
 	if s, ok := outgoing.(bsmsg.PaymentBitSwapMessage); ok {
-		fmt.Println("Send ", s.String())
+		//fmt.Println("Send ", s.String())
 		if s.Empty() {
 			fmt.Println("Send Empty")
 		}
