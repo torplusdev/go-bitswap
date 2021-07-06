@@ -63,7 +63,7 @@ type WantFunc func(context.Context, []cid.Cid)
 // AsyncGetBlocks take a set of block cids, a pubsub channel for incoming
 // blocks, a want function, and a close function, and returns a channel of
 // incoming blocks.
-func AsyncGetBlocks(ctx context.Context, sessctx context.Context, keys []cid.Cid, notif notifications.PubSub,
+func AsyncGetBlocks(ctx context.Context, sessionId uint64, sessctx context.Context, keys []cid.Cid, notif notifications.PubSub,
 	want WantFunc, cwants func([]cid.Cid)) (<-chan blocks.Block, error) {
 
 	// If there are no keys supplied, just return a closed channel
@@ -79,7 +79,7 @@ func AsyncGetBlocks(ctx context.Context, sessctx context.Context, keys []cid.Cid
 	// Register a handler for connection abort
 	go func() {
 		<-sessctx.Done()
-		log.Infof("Connection has been closed, need to clean up requests")
+		log.Infof("Connection has been closed (%d), need to clean up requests (%d)",sessionId, len(keys) )
 		cwants(keys)
 	}()
 
