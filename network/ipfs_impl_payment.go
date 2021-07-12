@@ -3,6 +3,7 @@ package network
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	bsmsg "github.com/ipfs/go-bitswap/message"
 	"github.com/ipfs/go-bitswap/pptools/speedcontrol"
@@ -106,9 +107,12 @@ func (pm *implWithPay) Connections() ([]*boomdata.Connections, error) {
 	cns := []*boomdata.Connections{}
 	for _, addresses := range pm.PeersAddresses() {
 		for _, address := range addresses {
-			cns = append(cns, &boomdata.Connections{
-				Hosts: []string{address.String()},
-			})
+			addr := address.String()
+			if strings.HasPrefix(addr, "/onion") {
+				cns = append(cns, &boomdata.Connections{
+					Hosts: []string{address.String()},
+				})
+			}
 		}
 	}
 	return cns, nil
@@ -155,8 +159,11 @@ func (pm *impl) PeersAddresses() map[peer.ID][]ma.Multiaddr {
 
 func (pm *implWithPay) PeersAddresses() map[peer.ID][]ma.Multiaddr {
 	addresses := make(map[peer.ID][]ma.Multiaddr)
-	for k, _ := range pm.peers {
-		addresses[k] = pm.impl.host.Peerstore().Addrs(k)
+
+	for _, c := range pm.host.Network().Conns() {
+		pid := c.RemotePeer()
+		addr := c.RemoteMultiaddr()
+		addresses[pid] = []ma.Multiaddr{addr}
 	}
 	return addresses
 }
