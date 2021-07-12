@@ -5,6 +5,7 @@ import (
 	"time"
 
 	bsmsg "github.com/ipfs/go-bitswap/message"
+	ma "github.com/multiformats/go-multiaddr"
 
 	cid "github.com/ipfs/go-cid"
 
@@ -29,6 +30,7 @@ var (
 type BitSwapNetwork interface {
 	Self() peer.ID
 
+	PeersAddresses() map[peer.ID][]ma.Multiaddr
 	// SendMessage sends a BitSwap message to a peer.
 	SendMessage(
 		context.Context,
