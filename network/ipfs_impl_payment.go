@@ -22,10 +22,11 @@ type implWithPay struct {
 	impl
 	speedController *speedcontrol.MultiSpeedDetector
 	payOption       PPOption
-	pm              PeerManager
-	paym            bspaym.PaymentManager
-	receiver        Receiver
-	peers           map[peer.ID]struct{}
+
+	pm       PeerManager
+	paym     bspaym.PaymentManager
+	receiver Receiver
+	peers    map[peer.ID]struct{}
 }
 type PPOption struct {
 	CommandListenPort int
@@ -97,6 +98,7 @@ func WithPayment(ctx context.Context, network BitSwapNetwork, pm PeerManager, se
 		server.SetPort(port)
 		paym.SetHttpConnection(port, n.payOption.ChannelUrl, server)
 		n.paym = paym
+		n.pm = pm
 		n.peers = make(map[peer.ID]struct{})
 		boomsvr.AddConnectionSource(n)
 	}
@@ -154,12 +156,10 @@ func (pm *implWithPay) ReceiveMessage(ctx context.Context, p peer.ID, incoming b
 
 func (pm *impl) PeersAddresses() map[peer.ID][]ma.Multiaddr {
 	return nil
-
 }
 
 func (pm *implWithPay) PeersAddresses() map[peer.ID][]ma.Multiaddr {
 	addresses := make(map[peer.ID][]ma.Multiaddr)
-
 	for _, c := range pm.host.Network().Conns() {
 		pid := c.RemotePeer()
 		addr := c.RemoteMultiaddr()
